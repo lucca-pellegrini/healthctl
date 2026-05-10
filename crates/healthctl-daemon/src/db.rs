@@ -332,7 +332,7 @@ impl Database {
         .await?;
 
         let today_calories: (f64,) = sqlx::query_as(
-            "SELECT COALESCE(SUM(em.value), 0) FROM event_metrics em
+            "SELECT COALESCE(SUM(em.value), 0.0) FROM event_metrics em
              JOIN events e ON em.event_id = e.id
              WHERE em.key = 'calories_kcal'
              AND COALESCE(e.start_time, e.end_time, e.created_at) >= ?",
@@ -344,7 +344,7 @@ impl Database {
         let today_active: (f64,) = sqlx::query_as(
             "SELECT COALESCE(SUM(
                 (julianday(end_time) - julianday(start_time)) * 86400.0
-             ), 0) FROM events
+             ), 0.0) FROM events
              WHERE event_type NOT LIKE '%sleep%'
              AND start_time IS NOT NULL AND end_time IS NOT NULL
              AND COALESCE(start_time, end_time, created_at) >= ?",
@@ -392,7 +392,7 @@ impl Database {
         .await?;
 
         let total_calories: (f64,) = sqlx::query_as(
-            "SELECT COALESCE(SUM(em.value), 0) FROM event_metrics em
+            "SELECT COALESCE(SUM(em.value), 0.0) FROM event_metrics em
              JOIN events e ON em.event_id = e.id
              WHERE em.key = 'calories_kcal'
              AND COALESCE(e.start_time, e.end_time, e.created_at) >= ?",
@@ -404,7 +404,7 @@ impl Database {
         let total_active: (f64,) = sqlx::query_as(
             "SELECT COALESCE(SUM(
                 (julianday(end_time) - julianday(start_time)) * 86400.0
-             ), 0) FROM events
+             ), 0.0) FROM events
              WHERE event_type NOT LIKE '%sleep%'
              AND start_time IS NOT NULL AND end_time IS NOT NULL
              AND COALESCE(start_time, end_time, created_at) >= ?",
