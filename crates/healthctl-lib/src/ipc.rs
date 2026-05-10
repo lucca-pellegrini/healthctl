@@ -14,8 +14,10 @@ pub enum Request {
         source_id: Uuid,
         overrides: serde_json::Value,
     },
-    /// Get an event by ID (for editing).
+    /// Get an event by full ID.
     Get { id: Uuid },
+    /// Get an event by ID prefix (short IDs).
+    GetByPrefix { prefix: String },
     /// Update an event (after editing).
     Update(Event),
     /// List events matching a filter.

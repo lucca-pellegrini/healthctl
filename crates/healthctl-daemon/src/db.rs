@@ -167,6 +167,28 @@ impl Database {
         }
     }
 
+    pub async fn get_event_by_prefix(&self, prefix: &str) -> Result<Option<Event>> {
+        let pattern = format!("{prefix}%");
+
+        let rows = sqlx::query_as::<_, EventRow>(
+            "SELECT id, event_type, start_time, end_time, created_at
+             FROM events WHERE id LIKE ? LIMIT 2",
+        )
+        .bind(&pattern)
+        .fetch_all(&self.pool)
+        .await?;
+
+        match rows.len() {
+            0 => Ok(None),
+            1 => {
+                let mut event = rows.into_iter().next().unwrap().into_event()?;
+                self.load_event_details(&mut event).await?;
+                Ok(Some(event))
+            }
+            _ => anyhow::bail!("prefix '{prefix}' is ambiguous (matches multiple events)"),
+        }
+    }
+
     pub async fn update_event(&self, event: &Event) -> Result<()> {
         let id = event.id.to_string();
 

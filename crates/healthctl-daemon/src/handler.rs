@@ -13,6 +13,7 @@ pub async fn handle_request(request: Request, db: &Database) -> Response {
             overrides,
         } => handle_clone(source_id, overrides, db).await,
         Request::Get { id } => handle_get(id, db).await,
+        Request::GetByPrefix { prefix } => handle_get_by_prefix(prefix, db).await,
         Request::Update(event) => handle_update(event, db).await,
         Request::List(filter) => handle_list(filter, db).await,
         Request::Status => handle_status(db).await,
@@ -126,6 +127,18 @@ async fn handle_get(id: Uuid, db: &Database) -> Response {
         },
         Err(e) => Response::Error {
             message: format!("database error: {e}"),
+        },
+    }
+}
+
+async fn handle_get_by_prefix(prefix: String, db: &Database) -> Response {
+    match db.get_event_by_prefix(&prefix).await {
+        Ok(Some(event)) => Response::Ok(ResponseData::Event(event)),
+        Ok(None) => Response::Error {
+            message: format!("no event matching prefix '{prefix}'"),
+        },
+        Err(e) => Response::Error {
+            message: e.to_string(),
         },
     }
 }
