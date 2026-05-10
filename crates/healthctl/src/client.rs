@@ -146,9 +146,16 @@ pub fn print_event_detail(response: Response) -> Result<()> {
                 println!("  Metrics:");
                 let mut keys: Vec<&String> = event.metrics.keys().collect();
                 keys.sort();
-                for key in keys {
-                    let val = event.metrics[key];
-                    println!("    {key}: {val}");
+                let formatted: Vec<(String, String)> = keys
+                    .iter()
+                    .map(|k| {
+                        let val = event.metrics[*k];
+                        (pretty_metric_name(k), format_metric_value(k, val))
+                    })
+                    .collect();
+                let max_name_len = formatted.iter().map(|(n, _)| n.len()).max().unwrap_or(0);
+                for (name, value) in &formatted {
+                    println!("    {:<width$}  {}", name, value, width = max_name_len);
                 }
             }
 
@@ -194,5 +201,63 @@ fn format_duration(secs: f64) -> String {
         format!("{h}h{m:02}m")
     } else {
         format!("{m}m")
+    }
+}
+
+/// Pretty-print a metric key for display.
+/// e.g. "distance_m" → "Distance", "calories_kcal" → "Calories", "weight_kg" → "Weight"
+fn pretty_metric_name(key: &str) -> String {
+    // Strip the unit suffix to get the base name.
+    let base = key
+        .strip_suffix("_m")
+        .or_else(|| key.strip_suffix("_kg"))
+        .or_else(|| key.strip_suffix("_ml"))
+        .or_else(|| key.strip_suffix("_kcal"))
+        .unwrap_or(key);
+
+    // Title-case, replacing underscores with spaces.
+    base.split('_')
+        .map(|word| {
+            let mut chars = word.chars();
+            match chars.next() {
+                Some(c) => format!("{}{}", c.to_uppercase(), chars.as_str()),
+                None => String::new(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Format a metric value with appropriate display unit.
+fn format_metric_value(key: &str, val: f64) -> String {
+    if key.ends_with("_m") {
+        if val.abs() >= 1000.0 {
+            format!("{:.2} km", val / 1000.0)
+        } else {
+            format!("{:.0} m", val)
+        }
+    } else if key.ends_with("_kg") {
+        if val.abs() < 0.001 {
+            format!("{:.0} mg", val * 1_000_000.0)
+        } else if val.abs() < 1.0 {
+            format!("{:.1} g", val * 1000.0)
+        } else {
+            format!("{:.1} kg", val)
+        }
+    } else if key.ends_with("_ml") {
+        if val.abs() >= 1000.0 {
+            format!("{:.2} l", val / 1000.0)
+        } else {
+            format!("{:.0} ml", val)
+        }
+    } else if key.ends_with("_kcal") {
+        format!("{:.0} kcal", val)
+    } else {
+        // Unitless (steps, sets, reps, etc.)
+        if val.fract() == 0.0 {
+            format!("{:.0}", val)
+        } else {
+            format!("{val}")
+        }
     }
 }
