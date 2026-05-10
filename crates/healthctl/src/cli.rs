@@ -18,14 +18,19 @@ pub struct Args {
 pub enum Command {
     /// Add a new health event.
     Add(AddCommand),
+    /// Show a single event in detail.
+    Show {
+        /// Event ID (full or prefix).
+        event_id: String,
+    },
     /// Clone an existing event with overrides.
     Clone(CloneCommand),
     /// List events.
     List(ListCommand),
     /// Edit an event in $EDITOR.
     Edit {
-        /// Event ID to edit.
-        event_id: Uuid,
+        /// Event ID (full or prefix).
+        event_id: String,
     },
     /// Show today's status summary.
     Status,

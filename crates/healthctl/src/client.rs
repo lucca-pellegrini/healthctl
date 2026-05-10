@@ -124,6 +124,68 @@ fn print_event_summary(event: &healthctl_lib::event::Event) {
     );
 }
 
+/// Print a single event in full detail.
+pub fn print_event_detail(response: Response) -> Result<()> {
+    match response {
+        Response::Ok(ResponseData::Event(event)) => {
+            let type_str = format!("{:?}", event.event_type);
+            println!("Event {}", event.id);
+            println!("  Type:       {type_str}");
+
+            if let Some(start) = event.start_time {
+                println!("  Start:      {}", start.format("%Y-%m-%d %H:%M:%S %Z"));
+            }
+            if let Some(end) = event.end_time {
+                println!("  End:        {}", end.format("%Y-%m-%d %H:%M:%S %Z"));
+            }
+            if let Some(dur) = event.duration_secs() {
+                println!("  Duration:   {}", format_duration(dur));
+            }
+
+            if !event.metrics.is_empty() {
+                println!("  Metrics:");
+                let mut keys: Vec<&String> = event.metrics.keys().collect();
+                keys.sort();
+                for key in keys {
+                    let val = event.metrics[key];
+                    println!("    {key}: {val}");
+                }
+            }
+
+            if !event.tags.is_empty() {
+                println!("  Tags:       {}", event.tags.join(", "));
+            }
+
+            if !event.exercises.is_empty() {
+                println!("  Exercises:");
+                for ex in &event.exercises {
+                    let mut parts = vec![ex.name.clone()];
+                    if let Some(s) = ex.sets {
+                        parts.push(format!("{s} sets"));
+                    }
+                    if let Some(r) = ex.reps {
+                        parts.push(format!("{r} reps"));
+                    }
+                    if let Some(w) = ex.weight_kg {
+                        parts.push(format!("{w:.1}kg"));
+                    }
+                    println!("    {}", parts.join(" | "));
+                }
+            }
+
+            println!(
+                "  Created:    {}",
+                event.created_at.format("%Y-%m-%d %H:%M:%S %Z")
+            );
+            Ok(())
+        }
+        Response::Error { message } => {
+            anyhow::bail!("{message}");
+        }
+        _ => anyhow::bail!("unexpected response from daemon"),
+    }
+}
+
 fn format_duration(secs: f64) -> String {
     let total = secs as u64;
     let h = total / 3600;
