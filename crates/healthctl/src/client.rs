@@ -103,7 +103,7 @@ fn print_event_summary(event: &healthctl_lib::event::Event) {
         .unwrap_or_else(|| "no time".into());
 
     let duration_str = event
-        .duration_secs
+        .duration_secs()
         .map(|d| format_duration(d))
         .unwrap_or_default();
 

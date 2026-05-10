@@ -20,9 +20,10 @@ impl Database {
             std::fs::create_dir_all(parent)?;
         }
 
-        let options = SqliteConnectOptions::from_str(&format!("sqlite://{}?mode=rwc", db_path.display()))?
-            .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
-            .create_if_missing(true);
+        let options =
+            SqliteConnectOptions::from_str(&format!("sqlite://{}?mode=rwc", db_path.display()))?
+                .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
+                .create_if_missing(true);
 
         let pool = SqlitePoolOptions::new()
             .max_connections(5)
@@ -50,7 +51,6 @@ impl Database {
                 event_type TEXT NOT NULL,
                 start_time TEXT,
                 end_time TEXT,
-                duration_secs REAL,
                 created_at TEXT NOT NULL
             );
 
@@ -98,28 +98,25 @@ impl Database {
         let created_at = event.created_at.to_rfc3339();
 
         sqlx::query(
-            "INSERT INTO events (id, event_type, start_time, end_time, duration_secs, created_at)
-             VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO events (id, event_type, start_time, end_time, created_at)
+             VALUES (?, ?, ?, ?, ?)",
         )
         .bind(&id)
         .bind(&event_type)
         .bind(&start_time)
         .bind(&end_time)
-        .bind(event.duration_secs)
         .bind(&created_at)
         .execute(&self.pool)
         .await?;
 
         // Insert metrics.
         for (key, value) in &event.metrics {
-            sqlx::query(
-                "INSERT INTO event_metrics (event_id, key, value) VALUES (?, ?, ?)",
-            )
-            .bind(&id)
-            .bind(key)
-            .bind(value)
-            .execute(&self.pool)
-            .await?;
+            sqlx::query("INSERT INTO event_metrics (event_id, key, value) VALUES (?, ?, ?)")
+                .bind(&id)
+                .bind(key)
+                .bind(value)
+                .execute(&self.pool)
+                .await?;
         }
 
         // Insert tags.
@@ -153,7 +150,7 @@ impl Database {
         let id_str = id.to_string();
 
         let row = sqlx::query_as::<_, EventRow>(
-            "SELECT id, event_type, start_time, end_time, duration_secs, created_at
+            "SELECT id, event_type, start_time, end_time, created_at
              FROM events WHERE id = ?",
         )
         .bind(&id_str)
@@ -193,27 +190,24 @@ impl Database {
         let end_time = event.end_time.map(|t| t.to_rfc3339());
 
         sqlx::query(
-            "UPDATE events SET event_type = ?, start_time = ?, end_time = ?, duration_secs = ?
+            "UPDATE events SET event_type = ?, start_time = ?, end_time = ?
              WHERE id = ?",
         )
         .bind(&event_type)
         .bind(&start_time)
         .bind(&end_time)
-        .bind(event.duration_secs)
         .bind(&id)
         .execute(&self.pool)
         .await?;
 
         // Re-insert metrics, tags, exercises.
         for (key, value) in &event.metrics {
-            sqlx::query(
-                "INSERT INTO event_metrics (event_id, key, value) VALUES (?, ?, ?)",
-            )
-            .bind(&id)
-            .bind(key)
-            .bind(value)
-            .execute(&self.pool)
-            .await?;
+            sqlx::query("INSERT INTO event_metrics (event_id, key, value) VALUES (?, ?, ?)")
+                .bind(&id)
+                .bind(key)
+                .bind(value)
+                .execute(&self.pool)
+                .await?;
         }
         for tag in &event.tags {
             sqlx::query("INSERT INTO event_tags (event_id, tag) VALUES (?, ?)")
@@ -241,7 +235,7 @@ impl Database {
 
     pub async fn list_events(&self, filter: &ListFilter) -> Result<Vec<Event>> {
         let mut sql = String::from(
-            "SELECT id, event_type, start_time, end_time, duration_secs, created_at FROM events WHERE 1=1",
+            "SELECT id, event_type, start_time, end_time, created_at FROM events WHERE 1=1",
         );
         let mut binds: Vec<String> = Vec::new();
 
@@ -326,9 +320,11 @@ impl Database {
         .await?;
 
         let today_active: (f64,) = sqlx::query_as(
-            "SELECT COALESCE(SUM(duration_secs), 0) FROM events
+            "SELECT COALESCE(SUM(
+                (julianday(end_time) - julianday(start_time)) * 86400.0
+             ), 0) FROM events
              WHERE event_type NOT LIKE '%sleep%'
-             AND duration_secs IS NOT NULL
+             AND start_time IS NOT NULL AND end_time IS NOT NULL
              AND COALESCE(start_time, end_time, created_at) >= ?",
         )
         .bind(&ts)
@@ -384,9 +380,11 @@ impl Database {
         .await?;
 
         let total_active: (f64,) = sqlx::query_as(
-            "SELECT COALESCE(SUM(duration_secs), 0) FROM events
+            "SELECT COALESCE(SUM(
+                (julianday(end_time) - julianday(start_time)) * 86400.0
+             ), 0) FROM events
              WHERE event_type NOT LIKE '%sleep%'
-             AND duration_secs IS NOT NULL
+             AND start_time IS NOT NULL AND end_time IS NOT NULL
              AND COALESCE(start_time, end_time, created_at) >= ?",
         )
         .bind(&ts)
@@ -415,11 +413,10 @@ impl Database {
         event.metrics = metrics.into_iter().collect();
 
         // Load tags.
-        let tags: Vec<(String,)> =
-            sqlx::query_as("SELECT tag FROM event_tags WHERE event_id = ?")
-                .bind(&id)
-                .fetch_all(&self.pool)
-                .await?;
+        let tags: Vec<(String,)> = sqlx::query_as("SELECT tag FROM event_tags WHERE event_id = ?")
+            .bind(&id)
+            .fetch_all(&self.pool)
+            .await?;
         event.tags = tags.into_iter().map(|(t,)| t).collect();
 
         // Load exercises.
@@ -441,7 +438,6 @@ struct EventRow {
     event_type: String,
     start_time: Option<String>,
     end_time: Option<String>,
-    duration_secs: Option<f64>,
     created_at: String,
 }
 
@@ -464,7 +460,6 @@ impl EventRow {
             event_type,
             start_time,
             end_time,
-            duration_secs: self.duration_secs,
             metrics: HashMap::new(),
             tags: Vec::new(),
             exercises: Vec::new(),

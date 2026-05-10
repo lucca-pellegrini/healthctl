@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use chrono::{DateTime, Local, NaiveTime, TimeZone, Utc};
 
 /// Parse a duration string into seconds.

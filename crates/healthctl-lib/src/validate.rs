@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 
 use crate::event::{Event, EventType};
 
@@ -19,10 +19,11 @@ pub fn validate_event(event: &Event) -> Result<()> {
             }
         }
         EventType::Sleep => {
-            if event.duration_secs.is_none()
-                && (event.start_time.is_none() || event.end_time.is_none())
-            {
-                bail!("sleep event requires at least --duration or both --start and --end");
+            // Sleep requires time information (start+end gives us duration).
+            if event.start_time.is_none() && event.end_time.is_none() {
+                bail!(
+                    "sleep event requires at least --duration, --start, or --end with enough info to resolve times"
+                );
             }
         }
         EventType::Nutrition => {
@@ -33,14 +34,11 @@ pub fn validate_event(event: &Event) -> Result<()> {
         _ => {
             // For activity, strength, mental: at least one piece of data must exist.
             let has_data = !event.metrics.is_empty()
-                || event.duration_secs.is_some()
                 || event.start_time.is_some()
                 || event.end_time.is_some()
                 || !event.exercises.is_empty();
             if !has_data {
-                bail!(
-                    "event must have at least one of: time info, duration, metrics, or exercises"
-                );
+                bail!("event must have at least one of: time info, metrics, or exercises");
             }
         }
     }
@@ -59,6 +57,7 @@ pub fn validate_event(event: &Event) -> Result<()> {
 mod tests {
     use super::*;
     use crate::event::{Event, EventType};
+    use chrono::Utc;
 
     #[test]
     fn test_hydration_requires_amount() {
@@ -80,9 +79,20 @@ mod tests {
     }
 
     #[test]
-    fn test_sleep_valid_with_duration() {
+    fn test_sleep_valid_with_times() {
         let mut event = Event::new(EventType::Sleep);
-        event.duration_secs = Some(28800.0);
+        let now = Utc::now();
+        event.end_time = Some(now);
+        event.start_time = Some(now - chrono::Duration::hours(8));
+        assert!(validate_event(&event).is_ok());
+    }
+
+    #[test]
+    fn test_sleep_valid_with_end_only() {
+        // If user gave --duration + no explicit times, resolve_times sets both.
+        // But if only --end was given (duration implicit from context), at least end exists.
+        let mut event = Event::new(EventType::Sleep);
+        event.end_time = Some(Utc::now());
         assert!(validate_event(&event).is_ok());
     }
 }
