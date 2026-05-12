@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use chrono::{DateTime, Local, NaiveTime, TimeZone, Utc};
 
 /// Parse a duration string into seconds.
@@ -98,22 +98,53 @@ pub fn parse_datetime(input: &str) -> Result<DateTime<Utc>> {
 }
 
 /// Try parsing a time-only string.
-/// Supports: "17:30", "5:30PM", "5:30pm", "05:30", "5:30 PM"
+/// Supports: "17:30", "5:30PM", "5:30pm", "05:30", "5:30 PM", "10AM", "5PM"
 fn try_parse_time(input: &str) -> Option<NaiveTime> {
     // 24h format: HH:MM
     if let Ok(t) = NaiveTime::parse_from_str(input, "%H:%M") {
-        return Some(t);
-    }
-    // 12h format: "5:30PM" / "5:30 PM"
-    let normalized = input.replace(' ', "").to_uppercase();
-    if let Ok(t) = NaiveTime::parse_from_str(&normalized, "%I:%M%p") {
         return Some(t);
     }
     // HH:MM:SS
     if let Ok(t) = NaiveTime::parse_from_str(input, "%H:%M:%S") {
         return Some(t);
     }
+    // 12h formats (normalize spaces and case).
+    let normalized = input.replace(' ', "").to_uppercase();
+    // "5:30PM", "10:30AM"
+    if let Ok(t) = NaiveTime::parse_from_str(&normalized, "%I:%M%p") {
+        return Some(t);
+    }
+    // Hour-only: "10AM", "5PM", "12PM"
+    if let Some(hour_time) = parse_hour_only_ampm(&normalized) {
+        return Some(hour_time);
+    }
     None
+}
+
+/// Parse "10AM", "5PM", "12AM" etc. into a NaiveTime.
+fn parse_hour_only_ampm(input: &str) -> Option<NaiveTime> {
+    let (num, period) = if let Some(h) = input.strip_suffix("AM") {
+        (h, "AM")
+    } else if let Some(h) = input.strip_suffix("PM") {
+        (h, "PM")
+    } else {
+        return None;
+    };
+
+    let hour: u32 = num.parse().ok()?;
+    if hour == 0 || hour > 12 {
+        return None;
+    }
+
+    let hour_24 = match (period, hour) {
+        ("AM", 12) => 0,
+        ("AM", h) => h,
+        ("PM", 12) => 12,
+        ("PM", h) => h + 12,
+        _ => return None,
+    };
+
+    NaiveTime::from_hms_opt(hour_24, 0, 0)
 }
 
 /// Given a time, find the most recent occurrence (today or yesterday, never future).

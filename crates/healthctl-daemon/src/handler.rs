@@ -8,8 +8,12 @@ use crate::db::Database;
 pub async fn handle_request(request: Request, db: &Database) -> Response {
     match request {
         Request::Add(event) => handle_add(event, db).await,
-        Request::Clone { source_id, overrides } => handle_clone(source_id, overrides, db).await,
+        Request::Clone {
+            source_id,
+            overrides,
+        } => handle_clone(source_id, overrides, db).await,
         Request::Get { id } => handle_get(id, db).await,
+        Request::GetByPrefix { prefix } => handle_get_by_prefix(prefix, db).await,
         Request::Update(event) => handle_update(event, db).await,
         Request::List(filter) => handle_list(filter, db).await,
         Request::Status => handle_status(db).await,
@@ -40,34 +44,36 @@ async fn handle_add(event: Event, db: &Database) -> Response {
     }
 }
 
-async fn handle_clone(
-    source_id: Uuid,
-    overrides: serde_json::Value,
-    db: &Database,
-) -> Response {
+async fn handle_clone(source_id: Uuid, overrides: serde_json::Value, db: &Database) -> Response {
     let source = match db.get_event(source_id).await {
         Ok(Some(e)) => e,
         Ok(None) => {
             return Response::Error {
                 message: format!("event {source_id} not found"),
-            }
+            };
         }
         Err(e) => {
             return Response::Error {
                 message: format!("database error: {e}"),
-            }
+            };
         }
     };
 
     // Serialize source to JSON, merge overrides, deserialize back.
     let mut source_json = serde_json::to_value(&source).unwrap();
+    let mut duration_override: Option<f64> = None;
+
     if let (Some(base), Some(patch)) = (source_json.as_object_mut(), overrides.as_object()) {
         for (key, value) in patch {
-            if key == "metrics" {
+            if key == "_duration_secs" {
+                // Special: duration override needs to be resolved into start/end.
+                duration_override = value.as_f64();
+            } else if key == "metrics" {
                 // Merge metrics rather than replacing entirely.
-                if let (Some(base_metrics), Some(patch_metrics)) =
-                    (base.get_mut("metrics").and_then(|v| v.as_object_mut()), value.as_object())
-                {
+                if let (Some(base_metrics), Some(patch_metrics)) = (
+                    base.get_mut("metrics").and_then(|v| v.as_object_mut()),
+                    value.as_object(),
+                ) {
                     for (k, v) in patch_metrics {
                         base_metrics.insert(k.clone(), v.clone());
                     }
@@ -80,17 +86,21 @@ async fn handle_clone(
 
     // Give it a new ID.
     source_json["id"] = serde_json::Value::String(Uuid::new_v4().to_string());
-    source_json["created_at"] =
-        serde_json::Value::String(chrono::Utc::now().to_rfc3339());
+    source_json["created_at"] = serde_json::Value::String(chrono::Utc::now().to_rfc3339());
 
-    let cloned: Event = match serde_json::from_value(source_json) {
+    let mut cloned: Event = match serde_json::from_value(source_json) {
         Ok(e) => e,
         Err(e) => {
             return Response::Error {
                 message: format!("failed to apply overrides: {e}"),
-            }
+            };
         }
     };
+
+    // Resolve times if duration was overridden.
+    if duration_override.is_some() {
+        cloned.resolve_times(duration_override);
+    }
 
     if let Err(e) = validate_event(&cloned) {
         return Response::Error {
@@ -121,6 +131,18 @@ async fn handle_get(id: Uuid, db: &Database) -> Response {
     }
 }
 
+async fn handle_get_by_prefix(prefix: String, db: &Database) -> Response {
+    match db.get_event_by_prefix(&prefix).await {
+        Ok(Some(event)) => Response::Ok(ResponseData::Event(event)),
+        Ok(None) => Response::Error {
+            message: format!("no event matching prefix '{prefix}'"),
+        },
+        Err(e) => Response::Error {
+            message: e.to_string(),
+        },
+    }
+}
+
 async fn handle_update(event: Event, db: &Database) -> Response {
     if let Err(e) = validate_event(&event) {
         return Response::Error {
@@ -139,10 +161,7 @@ async fn handle_update(event: Event, db: &Database) -> Response {
     }
 }
 
-async fn handle_list(
-    filter: healthctl_lib::ipc::ListFilter,
-    db: &Database,
-) -> Response {
+async fn handle_list(filter: healthctl_lib::ipc::ListFilter, db: &Database) -> Response {
     match db.list_events(&filter).await {
         Ok(events) => Response::Ok(ResponseData::Events(events)),
         Err(e) => Response::Error {

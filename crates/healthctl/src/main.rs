@@ -3,6 +3,7 @@ mod client;
 mod daemon_ctl;
 
 use anyhow::Result;
+use healthctl_lib::ipc::{Request, Response, ResponseData};
 use tracing_subscriber::EnvFilter;
 
 fn main() -> Result<()> {
@@ -14,11 +15,16 @@ fn main() -> Result<()> {
     match args.command {
         cli::Command::Add(add_cmd) => {
             let event = cli::build_event(add_cmd)?;
-            let response = client::send_request(healthctl_lib::ipc::Request::Add(event))?;
+            let response = client::send_request(Request::Add(event))?;
             client::print_response(response);
         }
+        cli::Command::Show { event_id } => {
+            let request = resolve_get_request(&event_id);
+            let response = client::send_request(request)?;
+            client::print_event_detail(response)?;
+        }
         cli::Command::Clone(clone_cmd) => {
-            let request = healthctl_lib::ipc::Request::Clone {
+            let request = Request::Clone {
                 source_id: clone_cmd.event_id,
                 overrides: clone_cmd.to_overrides()?,
             };
@@ -27,33 +33,31 @@ fn main() -> Result<()> {
         }
         cli::Command::List(list_cmd) => {
             let filter = list_cmd.to_filter()?;
-            let response = client::send_request(healthctl_lib::ipc::Request::List(filter))?;
+            let response = client::send_request(Request::List(filter))?;
             client::print_response(response);
         }
         cli::Command::Edit { event_id } => {
-            let response = client::send_request(healthctl_lib::ipc::Request::Get { id: event_id })?;
+            let request = resolve_get_request(&event_id);
+            let response = client::send_request(request)?;
             match response {
-                healthctl_lib::ipc::Response::Ok(healthctl_lib::ipc::ResponseData::Event(
-                    event,
-                )) => {
+                Response::Ok(ResponseData::Event(event)) => {
                     let updated = cli::edit_event(event)?;
-                    let response =
-                        client::send_request(healthctl_lib::ipc::Request::Update(updated))?;
+                    let response = client::send_request(Request::Update(updated))?;
                     client::print_response(response);
                 }
-                healthctl_lib::ipc::Response::Error { message } => {
-                    anyhow::bail!("daemon error: {message}");
+                Response::Error { message } => {
+                    anyhow::bail!("{message}");
                 }
                 _ => anyhow::bail!("unexpected response from daemon"),
             }
         }
         cli::Command::Status => {
-            let response = client::send_request(healthctl_lib::ipc::Request::Status)?;
+            let response = client::send_request(Request::Status)?;
             client::print_response(response);
         }
         cli::Command::Report { period } => {
             let period = cli::parse_report_period(&period)?;
-            let response = client::send_request(healthctl_lib::ipc::Request::Report { period })?;
+            let response = client::send_request(Request::Report { period })?;
             client::print_response(response);
         }
         cli::Command::Daemon(daemon_cmd) => {
@@ -62,4 +66,14 @@ fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+/// If the event_id parses as a full UUID, use Get; otherwise use GetByPrefix.
+fn resolve_get_request(event_id: &str) -> Request {
+    match uuid::Uuid::parse_str(event_id) {
+        Ok(id) => Request::Get { id },
+        Err(_) => Request::GetByPrefix {
+            prefix: event_id.to_string(),
+        },
+    }
 }

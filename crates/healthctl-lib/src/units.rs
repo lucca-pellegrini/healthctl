@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 
 /// Parse a value with a unit suffix and return the normalized SI value.
 /// Supported dimensions:

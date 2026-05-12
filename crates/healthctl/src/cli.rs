@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use clap::{Parser, Subcommand};
 use healthctl_lib::event::{ActivityKind, Event, EventType, MentalKind};
 use healthctl_lib::ipc::{ListFilter, ReportPeriod};
@@ -18,14 +18,19 @@ pub struct Args {
 pub enum Command {
     /// Add a new health event.
     Add(AddCommand),
+    /// Show a single event in detail.
+    Show {
+        /// Event ID (full or prefix).
+        event_id: String,
+    },
     /// Clone an existing event with overrides.
     Clone(CloneCommand),
     /// List events.
     List(ListCommand),
     /// Edit an event in $EDITOR.
     Edit {
-        /// Event ID to edit.
-        event_id: Uuid,
+        /// Event ID (full or prefix).
+        event_id: String,
     },
     /// Show today's status summary.
     Status,
@@ -157,17 +162,10 @@ pub fn build_event(cmd: AddCommand) -> Result<Event> {
     if let Some(ref s) = cmd.end {
         event.end_time = Some(parse_datetime(s)?);
     }
-    if let Some(ref s) = cmd.duration {
-        event.duration_secs = Some(parse_duration(s)?);
-    }
+    let duration_secs = cmd.duration.as_deref().map(parse_duration).transpose()?;
 
-    // If duration set but no start, and end is set → derive start.
-    // If duration set but no end → end = now, derive start.
-    if event.duration_secs.is_some() && event.end_time.is_none() && event.start_time.is_none() {
-        event.end_time = Some(chrono::Utc::now());
-    }
-    event.derive_start();
-    event.derive_duration();
+    // Resolve start/end from whatever combination was provided.
+    event.resolve_times(duration_secs);
 
     // Parse metrics.
     if let Some(ref v) = cmd.distance {
@@ -254,7 +252,8 @@ pub fn parse_report_period(s: &str) -> Result<ReportPeriod> {
         "day" | "today" | "d" => Ok(ReportPeriod::Day),
         "week" | "w" => Ok(ReportPeriod::Week),
         "month" | "m" => Ok(ReportPeriod::Month),
-        other => bail!("unknown report period: '{other}'. Valid: day, week, month"),
+        "year" | "y" => Ok(ReportPeriod::Year),
+        other => bail!("unknown report period: '{other}'. Valid: day, week, month, year"),
     }
 }
 
@@ -288,7 +287,9 @@ fn parse_event_type(category: &str, subtype: Option<&str>) -> Result<EventType> 
             };
             Ok(EventType::Mental(kind))
         }
-        other => bail!("unknown event category: '{other}'. Valid: activity, strength, sleep, nutrition, hydration, substance, mental"),
+        other => bail!(
+            "unknown event category: '{other}'. Valid: activity, strength, sleep, nutrition, hydration, substance, mental"
+        ),
     }
 }
 
@@ -330,7 +331,8 @@ impl CloneCommand {
         }
         if let Some(ref s) = self.duration {
             let secs = parse_duration(s)?;
-            map.insert("duration_secs".into(), serde_json::Value::from(secs));
+            // Pass as _duration_secs for the daemon to resolve into start/end.
+            map.insert("_duration_secs".into(), serde_json::Value::from(secs));
         }
         if let Some(ref v) = self.calories {
             let (val, _) = parse_metric(v)?;
