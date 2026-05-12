@@ -1,4 +1,4 @@
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 use clap::{Parser, Subcommand};
 use healthctl_lib::event::{ActivityKind, Event, EventType, MentalKind};
 use healthctl_lib::ipc::{ListFilter, ReportPeriod};
@@ -252,7 +252,8 @@ pub fn parse_report_period(s: &str) -> Result<ReportPeriod> {
         "day" | "today" | "d" => Ok(ReportPeriod::Day),
         "week" | "w" => Ok(ReportPeriod::Week),
         "month" | "m" => Ok(ReportPeriod::Month),
-        other => bail!("unknown report period: '{other}'. Valid: day, week, month"),
+        "year" | "y" => Ok(ReportPeriod::Year),
+        other => bail!("unknown report period: '{other}'. Valid: day, week, month, year"),
     }
 }
 

@@ -66,6 +66,7 @@ pub enum ReportPeriod {
     Day,
     Week,
     Month,
+    Year,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -380,6 +380,7 @@ impl Database {
             healthctl_lib::ipc::ReportPeriod::Day => 1,
             healthctl_lib::ipc::ReportPeriod::Week => 7,
             healthctl_lib::ipc::ReportPeriod::Month => 30,
+            healthctl_lib::ipc::ReportPeriod::Year => 365,
         };
         let from = now - chrono::Duration::days(days);
         let ts = from.to_rfc3339();
