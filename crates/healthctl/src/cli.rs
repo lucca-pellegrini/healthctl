@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use clap::{Parser, Subcommand};
 use healthctl_lib::event::{ActivityKind, Event, EventType, MentalKind};
 use healthctl_lib::ipc::{ListFilter, ReportPeriod};
