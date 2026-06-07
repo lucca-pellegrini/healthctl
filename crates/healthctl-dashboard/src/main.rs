@@ -176,9 +176,7 @@ fn connect_to_daemon() -> Result<std::os::unix::net::UnixStream, String> {
 
             if let Err(e) = Command::new(&daemon_path).spawn() {
                 eprintln!("Failed to start daemon: {}", e);
-                let _ = Command::new("cargo")
-                    .args(["run", "-p", "healthctl-daemon"])
-                    .spawn();
+                let _ = Command::new("healthctl").args(["daemon"]).spawn();
             }
 
             std::thread::sleep(std::time::Duration::from_secs(2));
