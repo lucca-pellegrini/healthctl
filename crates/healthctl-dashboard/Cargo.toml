@@ -13,4 +13,5 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 healthctl-lib = { workspace = true }
 tokio = { workspace = true }
-sqlx = { workspace = true }
+chrono = { workspace = true }
+dirs = "5"

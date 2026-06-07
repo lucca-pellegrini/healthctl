@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HealthCtl Fitness Dashboard</title>
+    <title>HealthCtl Dashboard</title>
     <style>
         * {
             margin: 0;
@@ -13,8 +13,8 @@
 
         body {
             background: #0a0a0a;
-            color: #ffffff;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            color: #e0e0e0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;
             min-height: 100vh;
             padding: 20px;
         }
@@ -23,8 +23,8 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 30px;
-            padding-bottom: 20px;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
             border-bottom: 1px solid #333;
         }
 
@@ -36,349 +36,411 @@
             letter-spacing: 2px;
         }
 
-        .status-indicator {
+        .status {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
+            font-size: 12px;
+            color: #888;
         }
 
         .status-dot {
-            width: 12px;
-            height: 12px;
+            width: 8px;
+            height: 8px;
             border-radius: 50%;
-            background: #00ff88;
-            animation: pulse 2s infinite;
+            background: #666;
         }
 
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
+        .status-dot.connected { background: #00ff88; }
+        .status-dot.error { background: #ff4444; }
 
-        .dashboard-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-
-        .metric-card {
-            background: linear-gradient(135deg, #1a1a1a 0%, #0d0d0d 100%);
-            border: 1px solid #333;
-            border-radius: 12px;
-            padding: 25px;
-            position: relative;
-            overflow: hidden;
-            transition: transform 0.3s, box-shadow 0.3s;
-        }
-
-        .metric-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 30px rgba(0, 212, 255, 0.2);
-        }
-
-        .metric-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 3px;
-            background: linear-gradient(90deg, #00d4ff, #00ff88);
-        }
-
-        .metric-label {
-            font-size: 12px;
-            color: #888;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 10px;
-        }
-
-        .metric-value {
-            font-size: 48px;
-            font-weight: 700;
-            line-height: 1;
-            margin-bottom: 10px;
-            background: linear-gradient(135deg, #00d4ff, #00ff88);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        .metric-unit {
-            font-size: 14px;
-            color: #666;
-            margin-left: 5px;
-        }
-
-        .metric-change {
-            font-size: 12px;
-            color: #00ff88;
-            display: flex;
-            align-items: center;
-            gap: 5px;
-        }
-
-        .metric-icon {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            font-size: 24px;
-            opacity: 0.2;
-        }
-
-        .heart-rate-card {
-            grid-column: span 2;
-            background: linear-gradient(135deg, #1a0d0d 0%, #0d0d0d 100%);
-        }
-
-        .heart-rate-card::before {
-            background: linear-gradient(90deg, #ff0044, #ff6b6b);
-        }
-
-        .heart-rate-card .metric-value {
-            background: linear-gradient(135deg, #ff0044, #ff6b6b);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        .gauge-container {
-            position: relative;
-            width: 200px;
-            height: 200px;
-            margin: 20px auto;
-        }
-
-        .gauge {
-            width: 100%;
-            height: 100%;
-        }
-
-        .chart-container {
-            background: #0d0d0d;
-            border: 1px solid #333;
-            border-radius: 12px;
-            padding: 20px;
-            margin-top: 20px;
-            height: 300px;
-        }
-
-        .chart-title {
-            font-size: 14px;
-            color: #888;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 15px;
-        }
-
-        #activityChart {
-            width: 100%;
-            height: 250px;
-        }
-
-        .bottom-grid {
+        .dashboard {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 20px;
-            margin-top: 20px;
         }
 
-        .progress-ring {
-            width: 120px;
-            height: 120px;
-            margin: 0 auto;
+        .panel {
+            background: #111;
+            border: 1px solid #222;
+            border-radius: 8px;
+            padding: 16px;
         }
 
-        .progress-ring circle {
-            fill: none;
-            stroke-width: 8;
+        .panel-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #888;
+            margin-bottom: 16px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
 
-        .progress-ring .progress-ring-bg {
-            stroke: #1a1a1a;
+        /* Today's Summary */
+        .today-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
         }
 
-        .progress-ring .progress-ring-fill {
-            stroke: #00d4ff;
-            stroke-linecap: round;
-            transform: rotate(-90deg);
-            transform-origin: 50% 50%;
-            transition: stroke-dashoffset 0.5s;
+        .stat-box {
+            background: #1a1a1a;
+            border-radius: 6px;
+            padding: 12px;
+            text-align: center;
         }
 
-        .loading {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            font-size: 18px;
+        .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+            color: #00d4ff;
+            line-height: 1.2;
+        }
+
+        .stat-label {
+            font-size: 11px;
             color: #666;
+            margin-top: 4px;
+            text-transform: uppercase;
+        }
+
+        .stat-box.sleep .stat-value { color: #9966ff; }
+        .stat-box.workouts .stat-value { color: #ff6644; }
+
+        /* Recent Activities */
+        .activities-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .activity-item {
+            display: grid;
+            grid-template-columns: 70px 1fr auto;
+            gap: 12px;
+            padding: 10px 0;
+            border-bottom: 1px solid #1a1a1a;
+            align-items: center;
+        }
+
+        .activity-item:last-child {
+            border-bottom: none;
+        }
+
+        .activity-time {
+            font-size: 12px;
+            color: #666;
+            font-family: monospace;
+        }
+
+        .activity-type {
+            font-weight: 500;
+        }
+
+        .activity-type .type-name {
+            color: #00d4ff;
+        }
+
+        .activity-type .subtype {
+            color: #888;
+            font-weight: 400;
+        }
+
+        .activity-details {
+            font-size: 12px;
+            color: #666;
+            margin-top: 2px;
+        }
+
+        .activity-tags {
+            display: flex;
+            gap: 4px;
+            flex-wrap: wrap;
+        }
+
+        .tag {
+            font-size: 10px;
+            background: #222;
+            color: #888;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+
+        .activity-duration {
+            font-size: 12px;
+            color: #00ff88;
+            font-family: monospace;
+        }
+
+        /* Weekly Chart */
+        .weekly-chart {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .day-column {
+            text-align: center;
+        }
+
+        .day-bar-container {
+            height: 120px;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            align-items: center;
+        }
+
+        .day-bar {
+            width: 100%;
+            max-width: 40px;
+            background: linear-gradient(to top, #00d4ff, #00ff88);
+            border-radius: 4px 4px 0 0;
+            min-height: 4px;
+        }
+
+        .day-value {
+            font-size: 10px;
+            color: #888;
+            margin-bottom: 4px;
+        }
+
+        .day-label {
+            font-size: 11px;
+            color: #666;
+            margin-top: 8px;
+        }
+
+        .day-date {
+            font-size: 9px;
+            color: #444;
+        }
+
+        .day-column.today .day-label {
+            color: #00d4ff;
+            font-weight: 600;
+        }
+
+        .day-column.future {
+            opacity: 0.3;
+        }
+
+        /* Empty state */
+        .empty-state {
+            color: #444;
+            text-align: center;
+            padding: 40px;
+            font-style: italic;
+        }
+
+        /* Loading */
+        .loading {
+            color: #666;
+            text-align: center;
+            padding: 20px;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #111;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #333;
+            border-radius: 3px;
         }
     </style>
 </head>
 <body>
     <div class="header">
-        <h1>⚡ Fitness Tracker</h1>
-        <div class="status-indicator">
-            <div class="status-dot"></div>
-            <span>Connected</span>
+        <h1>⚡ Fitness Dashboard</h1>
+        <div class="status">
+            <div class="status-dot" id="statusDot"></div>
+            <span id="statusText">Connecting...</span>
         </div>
     </div>
 
-    <div class="dashboard-grid">
-        <div class="metric-card heart-rate-card">
-            <div class="metric-label">Heart Rate</div>
-            <div class="metric-value" id="heartRate">--</div>
-            <div class="metric-unit">bpm</div>
-            <div class="metric-change">↑ 5% from average</div>
-            <div class="metric-icon">❤️</div>
-            <svg class="gauge-container">
-                <circle cx="100" cy="100" r="90" fill="none" stroke="#1a1a1a" stroke-width="10"/>
-                <circle id="hrGauge" cx="100" cy="100" r="90" fill="none" stroke="#ff0044" stroke-width="10" 
-                    stroke-dasharray="565" stroke-dashoffset="565" 
-                    transform="rotate(-90 100 100)" stroke-linecap="round"/>
-            </svg>
+    <div class="dashboard">
+        <!-- Weekly Summary -->
+        <div class="panel">
+            <div class="panel-title">This Week <span id="weekRange" style="color: #444; font-weight: 400;"></span></div>
+            <div class="today-grid" id="weekGrid">
+                <div class="stat-box">
+                    <div class="stat-value" id="weekSteps">--</div>
+                    <div class="stat-label">Steps</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="weekCalories">--</div>
+                    <div class="stat-label">Calories</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="weekDistance">--</div>
+                    <div class="stat-label">km</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="weekActive">--</div>
+                    <div class="stat-label">Active min</div>
+                </div>
+                <div class="stat-box sleep">
+                    <div class="stat-value" id="weekSleep">--</div>
+                    <div class="stat-label">Avg Sleep</div>
+                </div>
+                <div class="stat-box workouts">
+                    <div class="stat-value" id="weekWorkouts">--</div>
+                    <div class="stat-label">Workouts</div>
+                </div>
+            </div>
         </div>
 
-        <div class="metric-card">
-            <div class="metric-label">Steps Today</div>
-            <div class="metric-value" id="steps">--</div>
-            <div class="metric-change">68% of goal</div>
-            <div class="metric-icon">👟</div>
-            <svg class="progress-ring">
-                <circle class="progress-ring-bg" cx="60" cy="60" r="54"/>
-                <circle class="progress-ring-fill" id="stepsRing" cx="60" cy="60" r="54"
-                    stroke-dasharray="339" stroke-dashoffset="109"/>
-            </svg>
+        <!-- Weekly Chart -->
+        <div class="panel">
+            <div class="panel-title">This Week (Steps)</div>
+            <div class="weekly-chart" id="weeklyChart">
+                <div class="loading">Loading...</div>
+            </div>
         </div>
 
-        <div class="metric-card">
-            <div class="metric-label">Calories Burned</div>
-            <div class="metric-value" id="calories">--</div>
-            <div class="metric-unit">kcal</div>
-            <div class="metric-change">↑ 12% from yesterday</div>
-            <div class="metric-icon">🔥</div>
+        <!-- Recent Activities -->
+        <div class="panel" style="grid-column: span 2;">
+            <div class="panel-title">Recent Activities</div>
+            <div class="activities-list" id="activitiesList">
+                <div class="loading">Loading...</div>
+            </div>
         </div>
-
-        <div class="metric-card">
-            <div class="metric-label">Distance</div>
-            <div class="metric-value" id="distance">--</div>
-            <div class="metric-unit">km</div>
-            <div class="metric-change">Good pace!</div>
-            <div class="metric-icon">📍</div>
-        </div>
-
-        <div class="metric-card">
-            <div class="metric-label">Active Minutes</div>
-            <div class="metric-value" id="activeMinutes">--</div>
-            <div class="metric-unit">min</div>
-            <div class="metric-change">Keep going!</div>
-            <div class="metric-icon">⏱️</div>
-        </div>
-
-        <div class="metric-card">
-            <div class="metric-label">Sleep</div>
-            <div class="metric-value" id="sleepHours">--</div>
-            <div class="metric-unit">hours</div>
-            <div class="metric-change">Quality: Good</div>
-            <div class="metric-icon">😴</div>
-        </div>
-    </div>
-
-    <div class="chart-container">
-        <div class="chart-title">Weekly Activity</div>
-        <canvas id="activityChart"></canvas>
     </div>
 
     <script type="module">
         const { invoke } = window.__TAURI__.core;
 
+        function formatDuration(mins) {
+            if (!mins) return '';
+            if (mins < 60) return `${mins}m`;
+            const h = Math.floor(mins / 60);
+            const m = mins % 60;
+            return m > 0 ? `${h}h ${m}m` : `${h}h`;
+        }
+
+        function formatMetrics(metrics) {
+            const parts = [];
+            if (metrics.steps) parts.push(`${Math.round(metrics.steps).toLocaleString()} steps`);
+            if (metrics.distance_m) parts.push(`${(metrics.distance_m / 1000).toFixed(1)} km`);
+            if (metrics.calories_kcal) parts.push(`${Math.round(metrics.calories_kcal)} kcal`);
+            if (metrics.calories) parts.push(`${Math.round(metrics.calories)} kcal`);
+            return parts.join(' · ');
+        }
+
+        function renderActivities(activities) {
+            const container = document.getElementById('activitiesList');
+
+            if (!activities || activities.length === 0) {
+                container.innerHTML = '<div class="empty-state">No recent activities</div>';
+                return;
+            }
+
+            container.innerHTML = activities.map(activity => {
+                const typeDisplay = activity.subtype
+                    ? `<span class="type-name">${activity.event_type}</span> <span class="subtype">${activity.subtype}</span>`
+                    : `<span class="type-name">${activity.event_type}</span>`;
+
+                const details = formatMetrics(activity.metrics);
+                const duration = activity.duration_mins ? formatDuration(activity.duration_mins) : '';
+                const time = activity.start_time.split(' ')[1] || activity.start_time;
+                const date = activity.start_time.split(' ')[0] || '';
+
+                return `
+                    <div class="activity-item">
+                        <div class="activity-time">
+                            <div>${time}</div>
+                            <div style="color:#444;font-size:10px">${date}</div>
+                        </div>
+                        <div>
+                            <div class="activity-type">${typeDisplay}</div>
+                            ${details ? `<div class="activity-details">${details}</div>` : ''}
+                            ${activity.tags.length > 0 ? `
+                                <div class="activity-tags">
+                                    ${activity.tags.slice(0, 4).map(t => `<span class="tag">${t}</span>`).join('')}
+                                </div>
+                            ` : ''}
+                        </div>
+                        <div class="activity-duration">${duration}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderWeeklyChart(weekly) {
+            const container = document.getElementById('weeklyChart');
+
+            if (!weekly || !weekly.days || weekly.days.length === 0) {
+                container.innerHTML = '<div class="empty-state">No data</div>';
+                return;
+            }
+
+            const maxSteps = Math.max(...weekly.days.map(d => d.steps), 1);
+            const todayIdx = new Date().getDay(); // 0 = Sunday, matches our week layout
+
+            container.innerHTML = weekly.days.map((day, idx) => {
+                const height = (day.steps / maxSteps) * 100;
+                const isToday = idx === todayIdx;
+                const isFuture = idx > todayIdx;
+
+                return `
+                    <div class="day-column ${isToday ? 'today' : ''} ${isFuture ? 'future' : ''}">
+                        <div class="day-bar-container">
+                            <div class="day-value">${day.steps > 0 ? day.steps.toLocaleString() : ''}</div>
+                            <div class="day-bar" style="height: ${Math.max(height, 4)}%"></div>
+                        </div>
+                        <div class="day-label">${day.day_name}</div>
+                        <div class="day-date">${day.date}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderWeekSummary(week) {
+            document.getElementById('weekRange').textContent =
+                `(${week.week_start} - ${week.week_end})`;
+            document.getElementById('weekSteps').textContent =
+                week.total_steps > 0 ? week.total_steps.toLocaleString() : '0';
+            document.getElementById('weekCalories').textContent =
+                week.total_calories > 0 ? Math.round(week.total_calories).toLocaleString() : '0';
+            document.getElementById('weekDistance').textContent =
+                week.total_distance_km > 0 ? week.total_distance_km.toFixed(1) : '0';
+            document.getElementById('weekActive').textContent =
+                week.total_active_mins > 0 ? week.total_active_mins.toLocaleString() : '0';
+            document.getElementById('weekSleep').textContent =
+                week.avg_sleep_hours ? week.avg_sleep_hours.toFixed(1) : '--';
+            document.getElementById('weekWorkouts').textContent =
+                week.workout_count;
+        }
+
+        function setStatus(connected, message) {
+            const dot = document.getElementById('statusDot');
+            const text = document.getElementById('statusText');
+            dot.className = 'status-dot ' + (connected ? 'connected' : 'error');
+            text.textContent = message;
+        }
+
         async function updateDashboard() {
             try {
-                const metrics = await invoke('get_metrics');
-                
-                // Update metric values
-                document.getElementById('heartRate').textContent = metrics.heart_rate || '--';
-                document.getElementById('steps').textContent = metrics.steps?.toLocaleString() || '--';
-                document.getElementById('calories').textContent = metrics.calories?.toFixed(0) || '--';
-                document.getElementById('distance').textContent = metrics.distance?.toFixed(1) || '--';
-                document.getElementById('activeMinutes').textContent = metrics.active_minutes || '--';
-                document.getElementById('sleepHours').textContent = metrics.sleep_hours?.toFixed(1) || '--';
+                const data = await invoke('get_dashboard_data');
 
-                // Update heart rate gauge
-                if (metrics.heart_rate) {
-                    const hrPercent = Math.min((metrics.heart_rate / 200) * 100, 100);
-                    const hrOffset = 565 - (565 * hrPercent / 100);
-                    document.getElementById('hrGauge').style.strokeDashoffset = hrOffset;
-                }
-
-                // Update steps ring
-                if (metrics.steps) {
-                    const stepsGoal = 10000;
-                    const stepsPercent = Math.min((metrics.steps / stepsGoal) * 100, 100);
-                    const stepsOffset = 339 - (339 * stepsPercent / 100);
-                    document.getElementById('stepsRing').style.strokeDashoffset = stepsOffset;
-                }
+                setStatus(true, data.connection_status);
+                renderWeekSummary(data.week_summary);
+                renderWeeklyChart(data.weekly);
+                renderActivities(data.recent_activities);
 
             } catch (error) {
-                console.error('Failed to fetch metrics:', error);
+                console.error('Failed to fetch data:', error);
+                setStatus(false, `Error: ${error}`);
             }
         }
 
-        // Draw activity chart
-        function drawActivityChart() {
-            const canvas = document.getElementById('activityChart');
-            if (!canvas) return;
-            
-            const ctx = canvas.getContext('2d');
-            canvas.width = canvas.offsetWidth;
-            canvas.height = canvas.offsetHeight;
-
-            const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-            const data = [65, 78, 90, 81, 56, 95, 88];
-            
-            const barWidth = canvas.width / days.length * 0.6;
-            const spacing = canvas.width / days.length * 0.4;
-            const maxValue = Math.max(...data);
-
-            ctx.fillStyle = '#333';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            data.forEach((value, index) => {
-                const barHeight = (value / maxValue) * (canvas.height - 40);
-                const x = index * (barWidth + spacing) + spacing / 2;
-                const y = canvas.height - barHeight - 20;
-
-                // Draw bar
-                const gradient = ctx.createLinearGradient(0, y, 0, canvas.height - 20);
-                gradient.addColorStop(0, '#00d4ff');
-                gradient.addColorStop(1, '#00ff88');
-                ctx.fillStyle = gradient;
-                ctx.fillRect(x, y, barWidth, barHeight);
-
-                // Draw day label
-                ctx.fillStyle = '#666';
-                ctx.font = '12px sans-serif';
-                ctx.textAlign = 'center';
-                ctx.fillText(days[index], x + barWidth / 2, canvas.height - 5);
-
-                // Draw value
-                ctx.fillStyle = '#888';
-                ctx.fillText(value + '%', x + barWidth / 2, y - 5);
-            });
-        }
-
-        // Initialize dashboard
+        // Initialize
         updateDashboard();
-        drawActivityChart();
-
-        // Update every 5 seconds
-        setInterval(updateDashboard, 5000);
-
-        // Redraw chart on resize
-        window.addEventListener('resize', drawActivityChart);
+        setInterval(updateDashboard, 10000); // Update every 10 seconds
     </script>
 </body>
 </html>
