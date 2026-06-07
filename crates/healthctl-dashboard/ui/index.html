@@ -83,11 +83,60 @@
             gap: 12px;
         }
 
-        .stat-box {
+        /* Stat Card */
+        .stat-card {
+            height: 90px;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .stat-card.animating {
+            visibility: hidden;
+        }
+
+        .stat-card-front {
             background: #1a1a1a;
             border-radius: 6px;
             padding: 12px;
             text-align: center;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            border: 1px solid transparent;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* Hover effects */
+        .stat-card:hover .stat-card-front {
+            transform: translateY(-4px) scale(1.02);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+        }
+
+        /* Color-specific borders and glows on hover */
+        .stat-card[data-metric="steps"]:hover .stat-card-front {
+            border-color: #00d4ff66;
+            box-shadow: 0 0 20px #00d4ff22, 0 8px 24px rgba(0,0,0,0.4);
+        }
+        .stat-card[data-metric="calories"]:hover .stat-card-front {
+            border-color: #44dd8866;
+            box-shadow: 0 0 20px #44dd8822, 0 8px 24px rgba(0,0,0,0.4);
+        }
+        .stat-card[data-metric="distance"]:hover .stat-card-front {
+            border-color: #aa88ff66;
+            box-shadow: 0 0 20px #aa88ff22, 0 8px 24px rgba(0,0,0,0.4);
+        }
+        .stat-card[data-metric="active"]:hover .stat-card-front {
+            border-color: #ff884466;
+            box-shadow: 0 0 20px #ff884422, 0 8px 24px rgba(0,0,0,0.4);
+        }
+        .stat-card[data-metric="sleep"]:hover .stat-card-front {
+            border-color: #6699ff66;
+            box-shadow: 0 0 20px #6699ff22, 0 8px 24px rgba(0,0,0,0.4);
+        }
+        .stat-card[data-metric="workouts"]:hover .stat-card-front {
+            border-color: #ff664466;
+            box-shadow: 0 0 20px #ff664422, 0 8px 24px rgba(0,0,0,0.4);
         }
 
         .stat-value {
@@ -104,8 +153,406 @@
             text-transform: uppercase;
         }
 
-        .stat-box.sleep .stat-value { color: #9966ff; }
-        .stat-box.workouts .stat-value { color: #ff6644; }
+        /* Metric-specific value colors */
+        .stat-card[data-metric="steps"] .stat-value { color: #00d4ff; }
+        .stat-card[data-metric="calories"] .stat-value { color: #44dd88; }
+        .stat-card[data-metric="distance"] .stat-value { color: #aa88ff; }
+        .stat-card[data-metric="active"] .stat-value { color: #ff8844; }
+        .stat-card[data-metric="sleep"] .stat-value { color: #6699ff; }
+        .stat-card[data-metric="workouts"] .stat-value { color: #ff6644; }
+
+        /* Modal Overlay - backdrop only */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0);
+            backdrop-filter: blur(0px);
+            z-index: 1999;
+            pointer-events: none;
+            transition: background 0.5s ease, backdrop-filter 0.5s ease;
+        }
+
+        .modal-overlay.show {
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(8px);
+            pointer-events: auto;
+        }
+
+        /* Flying Card - the animated element */
+        .flying-card {
+            position: fixed;
+            z-index: 2000;
+            perspective: 1200px;
+            pointer-events: none;
+            visibility: hidden;
+            opacity: 0;
+        }
+
+        .flying-card.show {
+            pointer-events: auto;
+            visibility: visible;
+            opacity: 1;
+        }
+
+        .flying-card-inner {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            transform-style: preserve-3d;
+            transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .flying-card.flipped .flying-card-inner {
+            transform: rotateY(180deg);
+        }
+
+        .flying-card-front,
+        .flying-card-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .flying-card-front {
+            background: #1a1a1a;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            border: 1px solid transparent;
+        }
+
+        .flying-card-back {
+            background: #111;
+            transform: rotateY(180deg);
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Flying card metric colors */
+        .flying-card[data-metric="steps"] .flying-card-front {
+            border-color: #00d4ff66;
+            box-shadow: 0 0 30px #00d4ff33, 0 12px 40px rgba(0,0,0,0.5);
+        }
+        .flying-card[data-metric="calories"] .flying-card-front {
+            border-color: #44dd8866;
+            box-shadow: 0 0 30px #44dd8833, 0 12px 40px rgba(0,0,0,0.5);
+        }
+        .flying-card[data-metric="distance"] .flying-card-front {
+            border-color: #aa88ff66;
+            box-shadow: 0 0 30px #aa88ff33, 0 12px 40px rgba(0,0,0,0.5);
+        }
+        .flying-card[data-metric="active"] .flying-card-front {
+            border-color: #ff884466;
+            box-shadow: 0 0 30px #ff884433, 0 12px 40px rgba(0,0,0,0.5);
+        }
+        .flying-card[data-metric="sleep"] .flying-card-front {
+            border-color: #6699ff66;
+            box-shadow: 0 0 30px #6699ff33, 0 12px 40px rgba(0,0,0,0.5);
+        }
+        .flying-card[data-metric="workouts"] .flying-card-front {
+            border-color: #ff664466;
+            box-shadow: 0 0 30px #ff664433, 0 12px 40px rgba(0,0,0,0.5);
+        }
+
+        /* Flying card back (modal) colors */
+        .flying-card[data-metric="steps"] .flying-card-back {
+            border: 1px solid #00d4ff44;
+            box-shadow: 0 0 50px #00d4ff22, 0 20px 60px rgba(0,0,0,0.5);
+        }
+        .flying-card[data-metric="calories"] .flying-card-back {
+            border: 1px solid #44dd8844;
+            box-shadow: 0 0 50px #44dd8822, 0 20px 60px rgba(0,0,0,0.5);
+        }
+        .flying-card[data-metric="distance"] .flying-card-back {
+            border: 1px solid #aa88ff44;
+            box-shadow: 0 0 50px #aa88ff22, 0 20px 60px rgba(0,0,0,0.5);
+        }
+        .flying-card[data-metric="active"] .flying-card-back {
+            border: 1px solid #ff884444;
+            box-shadow: 0 0 50px #ff884422, 0 20px 60px rgba(0,0,0,0.5);
+        }
+        .flying-card[data-metric="sleep"] .flying-card-back {
+            border: 1px solid #6699ff44;
+            box-shadow: 0 0 50px #6699ff22, 0 20px 60px rgba(0,0,0,0.5);
+        }
+        .flying-card[data-metric="workouts"] .flying-card-back {
+            border: 1px solid #ff664444;
+            box-shadow: 0 0 50px #ff664422, 0 20px 60px rgba(0,0,0,0.5);
+        }
+
+        .flying-card-front .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+            line-height: 1.2;
+        }
+
+        .flying-card-front .stat-label {
+            font-size: 11px;
+            color: #666;
+            margin-top: 4px;
+            text-transform: uppercase;
+        }
+
+        .flying-card[data-metric="steps"] .flying-card-front .stat-value { color: #00d4ff; }
+        .flying-card[data-metric="calories"] .flying-card-front .stat-value { color: #44dd88; }
+        .flying-card[data-metric="distance"] .flying-card-front .stat-value { color: #aa88ff; }
+        .flying-card[data-metric="active"] .flying-card-front .stat-value { color: #ff8844; }
+        .flying-card[data-metric="sleep"] .flying-card-front .stat-value { color: #6699ff; }
+        .flying-card[data-metric="workouts"] .flying-card-front .stat-value { color: #ff6644; }
+
+        /* Modal Card - now inside flying-card-back */
+        .modal-card {
+            background: transparent;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Modal header color themes - based on flying-card parent */
+        .flying-card[data-metric="steps"] .modal-header {
+            background: linear-gradient(135deg, #0a1a1f 0%, #111 100%);
+            border-bottom-color: #00d4ff33;
+        }
+        .flying-card[data-metric="steps"] .modal-header-value { color: #00d4ff; }
+
+        .flying-card[data-metric="calories"] .modal-header {
+            background: linear-gradient(135deg, #0a1f15 0%, #111 100%);
+            border-bottom-color: #44dd8833;
+        }
+        .flying-card[data-metric="calories"] .modal-header-value { color: #44dd88; }
+
+        .flying-card[data-metric="distance"] .modal-header {
+            background: linear-gradient(135deg, #151020 0%, #111 100%);
+            border-bottom-color: #aa88ff33;
+        }
+        .flying-card[data-metric="distance"] .modal-header-value { color: #aa88ff; }
+
+        .flying-card[data-metric="active"] .modal-header {
+            background: linear-gradient(135deg, #1f1510 0%, #111 100%);
+            border-bottom-color: #ff884433;
+        }
+        .flying-card[data-metric="active"] .modal-header-value { color: #ff8844; }
+
+        .flying-card[data-metric="sleep"] .modal-header {
+            background: linear-gradient(135deg, #101520 0%, #111 100%);
+            border-bottom-color: #6699ff33;
+        }
+        .flying-card[data-metric="sleep"] .modal-header-value { color: #6699ff; }
+
+        .flying-card[data-metric="workouts"] .modal-header {
+            background: linear-gradient(135deg, #1f1210 0%, #111 100%);
+            border-bottom-color: #ff664433;
+        }
+        .flying-card[data-metric="workouts"] .modal-header-value { color: #ff6644; }
+
+        .modal-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid #222;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .modal-header-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .modal-header-value {
+            font-size: 36px;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .modal-header-label {
+            font-size: 12px;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .modal-close {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            color: #888;
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .modal-close:hover {
+            background: #222;
+            color: #fff;
+            border-color: #444;
+        }
+
+        .modal-body {
+            padding: 20px;
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        .modal-section {
+            margin-bottom: 20px;
+        }
+
+        .modal-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .modal-section-title {
+            font-size: 11px;
+            color: #555;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #222;
+        }
+
+        .modal-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid #1a1a1a;
+        }
+
+        .modal-row:last-child {
+            border-bottom: none;
+        }
+
+        .modal-row-label {
+            color: #888;
+            font-size: 13px;
+        }
+
+        .modal-row-value {
+            color: #e0e0e0;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .modal-row-value.positive {
+            color: #44dd88;
+        }
+
+        .modal-row-value.negative {
+            color: #ff6644;
+        }
+
+        .modal-row-value.projection {
+            color: #00d4ff;
+            font-style: italic;
+        }
+
+        .modal-breakdown {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .modal-breakdown-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .modal-breakdown-bar-bg {
+            flex: 1;
+            height: 8px;
+            background: #1a1a1a;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .modal-breakdown-bar {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.5s ease;
+        }
+
+        .modal-breakdown-label {
+            width: 70px;
+            font-size: 12px;
+            color: #888;
+            text-transform: capitalize;
+        }
+
+        .modal-breakdown-value {
+            width: 60px;
+            text-align: right;
+            font-size: 12px;
+            color: #aaa;
+            font-weight: 500;
+        }
+
+        /* Color-specific breakdown bars */
+        .flying-card[data-metric="steps"] .modal-breakdown-bar { background: linear-gradient(90deg, #00d4ff, #00ff88); }
+        .flying-card[data-metric="calories"] .modal-breakdown-bar { background: linear-gradient(90deg, #22aa66, #66ee99); }
+        .flying-card[data-metric="distance"] .modal-breakdown-bar { background: linear-gradient(90deg, #8855ee, #bb99ff); }
+        .flying-card[data-metric="active"] .modal-breakdown-bar { background: linear-gradient(90deg, #ff5522, #ffaa44); }
+        .flying-card[data-metric="sleep"] .modal-breakdown-bar { background: linear-gradient(90deg, #4477dd, #88bbff); }
+        .flying-card[data-metric="workouts"] .modal-breakdown-bar { background: linear-gradient(90deg, #ee4422, #ff8866); }
+
+        .sleep-night-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 12px;
+            background: #1a1a1a;
+            border-radius: 6px;
+            margin-bottom: 6px;
+        }
+
+        .sleep-night-date {
+            color: #888;
+            font-size: 12px;
+        }
+
+        .sleep-night-hours {
+            color: #e0e0e0;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .sleep-night-quality {
+            color: #ffcc00;
+            font-size: 12px;
+        }
+
+        .muscle-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .muscle-tag {
+            background: #1a1a1a;
+            color: #888;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            text-transform: capitalize;
+        }
 
         /* Recent Activities */
         .activities-list {
@@ -538,29 +985,70 @@
                 </div>
             </div>
             <div class="today-grid" id="weekGrid">
-                <div class="stat-box">
-                    <div class="stat-value" id="weekSteps">--</div>
-                    <div class="stat-label">Steps</div>
+                <div class="stat-card" data-metric="steps">
+                    <div class="stat-card-front">
+                        <div class="stat-value" id="weekSteps">--</div>
+                        <div class="stat-label">Steps</div>
+                    </div>
                 </div>
-                <div class="stat-box">
-                    <div class="stat-value" id="weekCalories">--</div>
-                    <div class="stat-label">Calories</div>
+                <div class="stat-card" data-metric="calories">
+                    <div class="stat-card-front">
+                        <div class="stat-value" id="weekCalories">--</div>
+                        <div class="stat-label">Calories</div>
+                    </div>
                 </div>
-                <div class="stat-box">
-                    <div class="stat-value" id="weekDistance">--</div>
-                    <div class="stat-label">km</div>
+                <div class="stat-card" data-metric="distance">
+                    <div class="stat-card-front">
+                        <div class="stat-value" id="weekDistance">--</div>
+                        <div class="stat-label">km</div>
+                    </div>
                 </div>
-                <div class="stat-box">
-                    <div class="stat-value" id="weekActive">--</div>
-                    <div class="stat-label">Active min</div>
+                <div class="stat-card" data-metric="active">
+                    <div class="stat-card-front">
+                        <div class="stat-value" id="weekActive">--</div>
+                        <div class="stat-label">Active min</div>
+                    </div>
                 </div>
-                <div class="stat-box sleep">
-                    <div class="stat-value" id="weekSleep">--</div>
-                    <div class="stat-label">Avg Sleep</div>
+                <div class="stat-card" data-metric="sleep">
+                    <div class="stat-card-front">
+                        <div class="stat-value" id="weekSleep">--</div>
+                        <div class="stat-label">Avg Sleep</div>
+                    </div>
                 </div>
-                <div class="stat-box workouts">
-                    <div class="stat-value" id="weekWorkouts">--</div>
-                    <div class="stat-label">Workouts</div>
+                <div class="stat-card" data-metric="workouts">
+                    <div class="stat-card-front">
+                        <div class="stat-value" id="weekWorkouts">--</div>
+                        <div class="stat-label">Workouts</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Backdrop (blur overlay) -->
+        <div class="modal-overlay" id="modalOverlay"></div>
+
+        <!-- Flying Card (animated flip card) -->
+        <div class="flying-card" id="flyingCard" data-metric="steps">
+            <div class="flying-card-inner">
+                <div class="flying-card-front">
+                    <div class="stat-value" id="flyingValue">--</div>
+                    <div class="stat-label" id="flyingLabel">Steps</div>
+                </div>
+                <div class="flying-card-back">
+                    <div class="modal-card">
+                        <div class="modal-header">
+                            <div class="modal-header-left">
+                                <div>
+                                    <div class="modal-header-value" id="modalValue">--</div>
+                                    <div class="modal-header-label" id="modalLabel">Steps</div>
+                                </div>
+                            </div>
+                            <button class="modal-close" id="modalClose">✕</button>
+                        </div>
+                        <div class="modal-body" id="modalBody">
+                            <!-- Content populated by JS -->
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -598,6 +1086,8 @@
         let calendarViewDate = new Date();
         let selectedMetric = 'steps';
         let weeklyData = null; // Cache for chart rendering
+        let cardDetailsData = null; // Cache for card details
+        let isCurrentWeek = true;
 
         // Utility functions
         function getWeekStart(date) {
@@ -783,6 +1273,411 @@
             renderWeeklyChart(null, metric);
         }
 
+        function formatChange(value) {
+            if (value === 0) return '<span class="card-back-value">—</span>';
+            const sign = value > 0 ? '+' : '';
+            const cls = value > 0 ? 'positive' : 'negative';
+            return `<span class="card-back-value ${cls}">${sign}${value.toFixed(1)}%</span>`;
+        }
+
+        function renderCardDetails(details, currentWeek) {
+            cardDetailsData = details;
+            isCurrentWeek = currentWeek;
+            // Card details data is cached for use when opening modals
+        }
+
+        // Animation state
+        let currentSourceCard = null;
+        let isAnimating = false;
+        const MODAL_WIDTH = 380;
+        const MODAL_HEIGHT = 500;
+        const ANIMATION_DURATION = 600; // ms
+
+        // Modal functions
+        function openModal(metric, sourceCard) {
+            if (!cardDetailsData || isAnimating) return;
+            isAnimating = true;
+
+            const overlay = document.getElementById('modalOverlay');
+            const flyingCard = document.getElementById('flyingCard');
+            const flyingValue = document.getElementById('flyingValue');
+            const flyingLabel = document.getElementById('flyingLabel');
+            const modalValue = document.getElementById('modalValue');
+            const modalLabel = document.getElementById('modalLabel');
+            const bodyEl = document.getElementById('modalBody');
+
+            currentSourceCard = sourceCard;
+            flyingCard.setAttribute('data-metric', metric);
+
+            const labels = {
+                steps: 'Steps',
+                calories: 'Calories',
+                distance: 'Distance',
+                active: 'Active Minutes',
+                sleep: 'Average Sleep',
+                workouts: 'Workouts'
+            };
+            const labelText = labels[metric] || metric;
+            flyingLabel.textContent = labelText;
+            modalLabel.textContent = labelText;
+
+            // Get values and populate content
+            let valueText = '';
+            let bodyHtml = '';
+            const d = cardDetailsData;
+
+            switch (metric) {
+                case 'steps':
+                    valueText = document.getElementById('weekSteps').textContent;
+                    bodyHtml = renderStepsModal(d.steps);
+                    break;
+                case 'calories':
+                    valueText = document.getElementById('weekCalories').textContent;
+                    bodyHtml = renderCaloriesModal(d.calories);
+                    break;
+                case 'distance':
+                    valueText = document.getElementById('weekDistance').textContent + ' km';
+                    bodyHtml = renderDistanceModal(d.distance);
+                    break;
+                case 'active':
+                    valueText = document.getElementById('weekActive').textContent + ' min';
+                    bodyHtml = renderActiveModal(d.active);
+                    break;
+                case 'sleep':
+                    valueText = document.getElementById('weekSleep').textContent + ' hrs';
+                    bodyHtml = renderSleepModal(d.sleep);
+                    break;
+                case 'workouts':
+                    valueText = document.getElementById('weekWorkouts').textContent;
+                    bodyHtml = renderWorkoutsModal(d.workouts);
+                    break;
+            }
+
+            flyingValue.textContent = valueText;
+            modalValue.textContent = valueText;
+            bodyEl.innerHTML = bodyHtml;
+
+            // Get source card position
+            const rect = sourceCard.getBoundingClientRect();
+            const startX = rect.left;
+            const startY = rect.top;
+            const startW = rect.width;
+            const startH = rect.height;
+
+            // Calculate center position for modal
+            const endW = MODAL_WIDTH;
+            const endH = MODAL_HEIGHT;
+            const endX = (window.innerWidth - endW) / 2;
+            const endY = (window.innerHeight - endH) / 2;
+
+            // Hide source card
+            sourceCard.classList.add('animating');
+
+            // Position flying card at source
+            flyingCard.style.left = startX + 'px';
+            flyingCard.style.top = startY + 'px';
+            flyingCard.style.width = startW + 'px';
+            flyingCard.style.height = startH + 'px';
+            flyingCard.style.transition = 'none';
+            flyingCard.classList.remove('flipped');
+            flyingCard.classList.add('show');
+
+            // Force reflow
+            flyingCard.offsetHeight;
+
+            // Show backdrop gradually
+            overlay.classList.add('show');
+
+            // Animate to center with flip
+            flyingCard.style.transition = `all ${ANIMATION_DURATION}ms cubic-bezier(0.4, 0, 0.2, 1)`;
+            flyingCard.style.left = endX + 'px';
+            flyingCard.style.top = endY + 'px';
+            flyingCard.style.width = endW + 'px';
+            flyingCard.style.height = endH + 'px';
+            flyingCard.classList.add('flipped');
+
+            // Bind close button after animation starts
+            setTimeout(() => {
+                isAnimating = false;
+            }, ANIMATION_DURATION);
+        }
+
+        function closeModal() {
+            if (isAnimating || !currentSourceCard) return;
+            isAnimating = true;
+
+            const overlay = document.getElementById('modalOverlay');
+            const flyingCard = document.getElementById('flyingCard');
+
+            // Get source card position for reverse animation
+            const rect = currentSourceCard.getBoundingClientRect();
+            const endX = rect.left;
+            const endY = rect.top;
+            const endW = rect.width;
+            const endH = rect.height;
+
+            // Hide backdrop
+            overlay.classList.remove('show');
+
+            // Animate back to source with reverse flip
+            flyingCard.style.transition = `all ${ANIMATION_DURATION}ms cubic-bezier(0.4, 0, 0.2, 1)`;
+            flyingCard.style.left = endX + 'px';
+            flyingCard.style.top = endY + 'px';
+            flyingCard.style.width = endW + 'px';
+            flyingCard.style.height = endH + 'px';
+            flyingCard.classList.remove('flipped');
+
+            // After animation, clean up
+            setTimeout(() => {
+                flyingCard.classList.remove('show');
+                currentSourceCard.classList.remove('animating');
+                currentSourceCard = null;
+                isAnimating = false;
+            }, ANIMATION_DURATION);
+        }
+
+        function formatChangeValue(value) {
+            if (value === 0) return '<span class="modal-row-value">—</span>';
+            const sign = value > 0 ? '+' : '';
+            const cls = value > 0 ? 'positive' : 'negative';
+            return `<span class="modal-row-value ${cls}">${sign}${value.toFixed(1)}%</span>`;
+        }
+
+        function renderBreakdown(items, metric, formatFn) {
+            if (!items || items.length === 0) return '';
+            const maxVal = Math.max(...items.map(([_, v]) => v), 1);
+            return `
+                <div class="modal-section">
+                    <div class="modal-section-title">By Activity</div>
+                    <div class="modal-breakdown">
+                        ${items.slice(0, 5).map(([type, val]) => `
+                            <div class="modal-breakdown-item">
+                                <span class="modal-breakdown-label">${type}</span>
+                                <div class="modal-breakdown-bar-bg">
+                                    <div class="modal-breakdown-bar" style="width: ${(val / maxVal) * 100}%"></div>
+                                </div>
+                                <span class="modal-breakdown-value">${formatFn(val)}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderStepsModal(data) {
+            return `
+                <div class="modal-section">
+                    <div class="modal-section-title">Statistics</div>
+                    <div class="modal-row">
+                        <span class="modal-row-label">Daily Average</span>
+                        <span class="modal-row-value">${data.daily_avg.toLocaleString()}</span>
+                    </div>
+                    <div class="modal-row">
+                        <span class="modal-row-label">Best Day</span>
+                        <span class="modal-row-value">${data.best_day} (${data.best_day_steps.toLocaleString()})</span>
+                    </div>
+                </div>
+                <div class="modal-section">
+                    <div class="modal-section-title">Comparisons</div>
+                    <div class="modal-row">
+                        <span class="modal-row-label">vs Last Week</span>
+                        ${formatChangeValue(data.vs_last_week)}
+                    </div>
+                    <div class="modal-row">
+                        <span class="modal-row-label">vs Month Average</span>
+                        ${formatChangeValue(data.vs_last_month)}
+                    </div>
+                </div>
+                ${data.projection ? `
+                <div class="modal-section">
+                    <div class="modal-section-title">Projection</div>
+                    <div class="modal-row">
+                        <span class="modal-row-label">Week Total (estimated)</span>
+                        <span class="modal-row-value projection">${data.projection.toLocaleString()} steps</span>
+                    </div>
+                </div>` : ''}
+            `;
+        }
+
+        function renderCaloriesModal(data) {
+            return `
+                ${renderBreakdown(data.by_activity, 'calories', v => Math.round(v) + ' kcal')}
+                <div class="modal-section">
+                    <div class="modal-section-title">Statistics</div>
+                    <div class="modal-row">
+                        <span class="modal-row-label">Daily Average</span>
+                        <span class="modal-row-value">${Math.round(data.daily_avg)} kcal</span>
+                    </div>
+                    <div class="modal-row">
+                        <span class="modal-row-label">Best Day</span>
+                        <span class="modal-row-value">${data.best_day} (${Math.round(data.best_day_calories)} kcal)</span>
+                    </div>
+                </div>
+                <div class="modal-section">
+                    <div class="modal-section-title">Comparisons</div>
+                    <div class="modal-row">
+                        <span class="modal-row-label">vs Last Week</span>
+                        ${formatChangeValue(data.vs_last_week)}
+                    </div>
+                </div>
+                ${data.projection ? `
+                <div class="modal-section">
+                    <div class="modal-section-title">Projection</div>
+                    <div class="modal-row">
+                        <span class="modal-row-label">Week Total (estimated)</span>
+                        <span class="modal-row-value projection">${Math.round(data.projection).toLocaleString()} kcal</span>
+                    </div>
+                </div>` : ''}
+            `;
+        }
+
+        function renderDistanceModal(data) {
+            return `
+                ${renderBreakdown(data.by_activity, 'distance', v => v.toFixed(1) + ' km')}
+                <div class="modal-section">
+                    <div class="modal-section-title">Statistics</div>
+                    <div class="modal-row">
+                        <span class="modal-row-label">Best Day</span>
+                        <span class="modal-row-value">${data.best_day} (${data.best_day_km.toFixed(1)} km)</span>
+                    </div>
+                    ${data.total_elevation > 0 ? `
+                    <div class="modal-row">
+                        <span class="modal-row-label">Total Elevation</span>
+                        <span class="modal-row-value">${Math.round(data.total_elevation)} m</span>
+                    </div>` : ''}
+                </div>
+                <div class="modal-section">
+                    <div class="modal-section-title">Comparisons</div>
+                    <div class="modal-row">
+                        <span class="modal-row-label">vs Last Week</span>
+                        ${formatChangeValue(data.vs_last_week)}
+                    </div>
+                </div>
+                ${data.projection ? `
+                <div class="modal-section">
+                    <div class="modal-section-title">Projection</div>
+                    <div class="modal-row">
+                        <span class="modal-row-label">Week Total (estimated)</span>
+                        <span class="modal-row-value projection">${data.projection.toFixed(1)} km</span>
+                    </div>
+                </div>` : ''}
+            `;
+        }
+
+        function renderActiveModal(data) {
+            return `
+                ${renderBreakdown(data.by_activity, 'active', v => v + ' min')}
+                <div class="modal-section">
+                    <div class="modal-section-title">Statistics</div>
+                    <div class="modal-row">
+                        <span class="modal-row-label">Daily Average</span>
+                        <span class="modal-row-value">${data.daily_avg} min</span>
+                    </div>
+                    <div class="modal-row">
+                        <span class="modal-row-label">Most Active Day</span>
+                        <span class="modal-row-value">${data.most_active_day || '—'}</span>
+                    </div>
+                </div>
+                <div class="modal-section">
+                    <div class="modal-section-title">Comparisons</div>
+                    <div class="modal-row">
+                        <span class="modal-row-label">vs Last Week</span>
+                        ${formatChangeValue(data.vs_last_week)}
+                    </div>
+                </div>
+                ${data.projection ? `
+                <div class="modal-section">
+                    <div class="modal-section-title">Projection</div>
+                    <div class="modal-row">
+                        <span class="modal-row-label">Week Total (estimated)</span>
+                        <span class="modal-row-value projection">${data.projection} min</span>
+                    </div>
+                </div>` : ''}
+            `;
+        }
+
+        function renderSleepModal(data) {
+            const nightsHtml = data.nights && data.nights.length > 0 ? `
+                <div class="modal-section">
+                    <div class="modal-section-title">Sleep Log</div>
+                    ${data.nights.slice(0, 7).map(n => `
+                        <div class="sleep-night-item">
+                            <span class="sleep-night-date">${n.date}</span>
+                            <span class="sleep-night-hours">${n.hours.toFixed(1)}h</span>
+                            ${n.quality ? `<span class="sleep-night-quality">${n.quality}/10</span>` : ''}
+                        </div>
+                    `).join('')}
+                </div>
+            ` : '';
+
+            return `
+                ${nightsHtml}
+                <div class="modal-section">
+                    <div class="modal-section-title">Statistics</div>
+                    ${data.best_night ? `
+                    <div class="modal-row">
+                        <span class="modal-row-label">Best Night</span>
+                        <span class="modal-row-value">${data.best_night} (${data.best_night_hours.toFixed(1)}h)</span>
+                    </div>` : ''}
+                    ${data.worst_night ? `
+                    <div class="modal-row">
+                        <span class="modal-row-label">Worst Night</span>
+                        <span class="modal-row-value">${data.worst_night} (${data.worst_night_hours.toFixed(1)}h)</span>
+                    </div>` : ''}
+                    ${data.avg_quality > 0 ? `
+                    <div class="modal-row">
+                        <span class="modal-row-label">Avg Quality</span>
+                        <span class="modal-row-value">${data.avg_quality.toFixed(1)}/10</span>
+                    </div>` : ''}
+                </div>
+                <div class="modal-section">
+                    <div class="modal-section-title">Comparisons</div>
+                    <div class="modal-row">
+                        <span class="modal-row-label">vs Last Week</span>
+                        ${formatChangeValue(data.vs_last_week)}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderWorkoutsModal(data) {
+            const byTypeHtml = data.by_type && data.by_type.length > 0 ? `
+                ${renderBreakdown(data.by_type, 'workouts', v => v + 'x')}
+            ` : '';
+
+            const musclesHtml = data.muscle_groups && data.muscle_groups.length > 0 ? `
+                <div class="modal-section">
+                    <div class="modal-section-title">Muscle Groups Worked</div>
+                    <div class="muscle-tags">
+                        ${data.muscle_groups.map(m => `<span class="muscle-tag">${m}</span>`).join('')}
+                    </div>
+                </div>
+            ` : '';
+
+            return `
+                ${byTypeHtml}
+                <div class="modal-section">
+                    <div class="modal-section-title">Statistics</div>
+                    <div class="modal-row">
+                        <span class="modal-row-label">Total Duration</span>
+                        <span class="modal-row-value">${formatDuration(data.total_duration)}</span>
+                    </div>
+                    <div class="modal-row">
+                        <span class="modal-row-label">Average Duration</span>
+                        <span class="modal-row-value">${data.avg_duration} min</span>
+                    </div>
+                </div>
+                <div class="modal-section">
+                    <div class="modal-section-title">Comparisons</div>
+                    <div class="modal-row">
+                        <span class="modal-row-label">vs Last Week</span>
+                        ${formatChangeValue(data.vs_last_week)}
+                    </div>
+                </div>
+                ${musclesHtml}
+            `;
+        }
+
         function renderWeekSummary(week) {
             // Update panel titles based on selected week
             const isCurrentWeek = !selectedWeekStart || isSameDay(selectedWeekStart, getWeekStart(new Date()));
@@ -830,6 +1725,7 @@
                 renderWeekSummary(data.week_summary);
                 renderWeeklyChart(data.weekly);
                 renderActivities(data.recent_activities);
+                renderCardDetails(data.card_details, data.is_current_week);
                 updateWeekSelectorLabel();
 
             } catch (error) {
@@ -987,6 +1883,35 @@
                 const metric = tab.getAttribute('data-metric');
                 switchMetric(metric);
             });
+        });
+
+        // Stat card click handlers - open modals
+        document.querySelectorAll('.stat-card').forEach(card => {
+            card.addEventListener('click', () => {
+                const metric = card.getAttribute('data-metric');
+                openModal(metric, card);
+            });
+        });
+
+        // Modal close handlers
+        document.getElementById('modalClose').addEventListener('click', (e) => {
+            e.stopPropagation();
+            closeModal();
+        });
+
+        // Click on backdrop to close
+        document.getElementById('modalOverlay').addEventListener('click', closeModal);
+
+        // Click on flying card back (modal area) should not close
+        document.getElementById('flyingCard').addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+
+        // Close modal with Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeModal();
+            }
         });
 
         // Initialize tab indicator position after DOM is ready
