@@ -1,0 +1,17 @@
+[package]
+name = "healthctl-dashboard"
+version.workspace = true
+edition.workspace = true
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+serde = { workspace = true }
+serde_json = { workspace = true }
+healthctl-lib = { workspace = true }
+tokio = { workspace = true }
+chrono = { workspace = true }
+dirs = "5"
