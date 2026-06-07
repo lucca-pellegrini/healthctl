@@ -225,6 +225,75 @@
             opacity: 0.3;
         }
 
+        /* Chart Tabs */
+        .chart-tabs {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 12px;
+            position: relative;
+            background: #1a1a1a;
+            border-radius: 6px;
+            padding: 4px;
+        }
+
+        .chart-tab {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: #666;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            transition: color 0.2s;
+            position: relative;
+            z-index: 1;
+        }
+
+        .chart-tab:hover {
+            color: #888;
+        }
+
+        .chart-tab.active {
+            color: #fff;
+        }
+
+        .tab-indicator {
+            position: absolute;
+            height: calc(100% - 8px);
+            top: 4px;
+            border-radius: 4px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 0;
+        }
+
+        /* Metric-specific colors */
+        .chart-tab.active[data-metric="steps"] { color: #00d4ff; }
+        .chart-tab.active[data-metric="calories"] { color: #44dd88; }
+        .chart-tab.active[data-metric="distance"] { color: #aa88ff; }
+        .chart-tab.active[data-metric="active"] { color: #ff8844; }
+        .chart-tab.active[data-metric="sleep"] { color: #6699ff; }
+
+        /* Bar color schemes */
+        .weekly-chart[data-metric="steps"] .day-bar {
+            background: linear-gradient(to top, #00d4ff, #00ff88);
+        }
+        .weekly-chart[data-metric="calories"] .day-bar {
+            background: linear-gradient(to top, #22aa66, #66ee99);
+        }
+        .weekly-chart[data-metric="distance"] .day-bar {
+            background: linear-gradient(to top, #8855ee, #bb99ff);
+        }
+        .weekly-chart[data-metric="active"] .day-bar {
+            background: linear-gradient(to top, #ff5522, #ffaa44);
+        }
+        .weekly-chart[data-metric="sleep"] .day-bar {
+            background: linear-gradient(to top, #4477dd, #88bbff);
+        }
+
         /* Week Selector */
         .week-selector {
             position: relative;
@@ -498,8 +567,16 @@
 
         <!-- Weekly Chart -->
         <div class="panel">
-            <div class="panel-title" id="chartTitle">This Week (Steps)</div>
-            <div class="weekly-chart" id="weeklyChart">
+            <div class="panel-title" id="chartTitle">This Week</div>
+            <div class="chart-tabs">
+                <button class="chart-tab active" data-metric="steps">Steps</button>
+                <button class="chart-tab" data-metric="calories">Calories</button>
+                <button class="chart-tab" data-metric="distance">Distance</button>
+                <button class="chart-tab" data-metric="active">Active</button>
+                <button class="chart-tab" data-metric="sleep">Sleep</button>
+                <div class="tab-indicator" id="tabIndicator"></div>
+            </div>
+            <div class="weekly-chart" id="weeklyChart" data-metric="steps">
                 <div class="loading">Loading...</div>
             </div>
         </div>
@@ -519,6 +596,8 @@
         // State
         let selectedWeekStart = null; // null means current week
         let calendarViewDate = new Date();
+        let selectedMetric = 'steps';
+        let weeklyData = null; // Cache for chart rendering
 
         // Utility functions
         function getWeekStart(date) {
@@ -604,7 +683,37 @@
             }).join('');
         }
 
-        function renderWeeklyChart(weekly) {
+        function getMetricValue(day, metric) {
+            switch (metric) {
+                case 'steps': return day.steps || 0;
+                case 'calories': return day.calories || 0;
+                case 'distance': return day.distance_km || 0;
+                case 'active': return day.active_mins || 0;
+                case 'sleep': return day.sleep_hours || 0;
+                default: return 0;
+            }
+        }
+
+        function formatMetricValue(value, metric) {
+            if (value === 0) return '';
+            switch (metric) {
+                case 'steps': return value.toLocaleString();
+                case 'calories': return Math.round(value).toLocaleString();
+                case 'distance': return value.toFixed(1);
+                case 'active': return Math.round(value) + 'm';
+                case 'sleep': return value.toFixed(1) + 'h';
+                default: return value.toString();
+            }
+        }
+
+        function renderWeeklyChart(weekly, metric = selectedMetric) {
+            // Cache the data for metric switching
+            if (weekly) {
+                weeklyData = weekly;
+            } else {
+                weekly = weeklyData;
+            }
+
             const container = document.getElementById('weeklyChart');
 
             if (!weekly || !weekly.days || weekly.days.length === 0) {
@@ -612,21 +721,26 @@
                 return;
             }
 
-            const maxSteps = Math.max(...weekly.days.map(d => d.steps), 1);
+            // Set the metric attribute for CSS styling
+            container.setAttribute('data-metric', metric);
+
+            const values = weekly.days.map(d => getMetricValue(d, metric));
+            const maxValue = Math.max(...values, 0.1); // Avoid division by zero
             const todayIdx = new Date().getDay(); // 0 = Sunday, matches our week layout
 
             // Check if we're viewing the current week
             const isCurrentWeek = !selectedWeekStart || isSameDay(selectedWeekStart, getWeekStart(new Date()));
 
             container.innerHTML = weekly.days.map((day, idx) => {
-                const height = (day.steps / maxSteps) * 100;
+                const value = getMetricValue(day, metric);
+                const height = (value / maxValue) * 100;
                 const isToday = isCurrentWeek && idx === todayIdx;
                 const isFuture = isCurrentWeek && idx > todayIdx;
 
                 return `
                     <div class="day-column ${isToday ? 'today' : ''} ${isFuture ? 'future' : ''}">
                         <div class="day-bar-container">
-                            <div class="day-value">${day.steps > 0 ? day.steps.toLocaleString() : ''}</div>
+                            <div class="day-value">${formatMetricValue(value, metric)}</div>
                             <div class="day-bar" style="height: ${Math.max(height, 4)}%"></div>
                         </div>
                         <div class="day-label">${day.day_name}</div>
@@ -634,6 +748,39 @@
                     </div>
                 `;
             }).join('');
+        }
+
+        function updateTabIndicator() {
+            const activeTab = document.querySelector('.chart-tab.active');
+            const indicator = document.getElementById('tabIndicator');
+            if (activeTab && indicator) {
+                const metric = activeTab.getAttribute('data-metric');
+                const colors = {
+                    steps: '#00d4ff',
+                    calories: '#44dd88',
+                    distance: '#aa88ff',
+                    active: '#ff8844',
+                    sleep: '#6699ff'
+                };
+                indicator.style.left = activeTab.offsetLeft + 'px';
+                indicator.style.width = activeTab.offsetWidth + 'px';
+                indicator.style.background = colors[metric] + '33';
+            }
+        }
+
+        function switchMetric(metric) {
+            selectedMetric = metric;
+
+            // Update active tab
+            document.querySelectorAll('.chart-tab').forEach(tab => {
+                tab.classList.toggle('active', tab.getAttribute('data-metric') === metric);
+            });
+
+            // Update indicator
+            updateTabIndicator();
+
+            // Re-render chart with cached data
+            renderWeeklyChart(null, metric);
         }
 
         function renderWeekSummary(week) {
@@ -644,7 +791,7 @@
                 : `${week.week_start} - ${week.week_end}`;
 
             document.getElementById('summaryTitle').textContent = weekLabel;
-            document.getElementById('chartTitle').textContent = `${weekLabel} (Steps)`;
+            document.getElementById('chartTitle').textContent = weekLabel;
             document.getElementById('activitiesTitle').textContent =
                 isCurrentWeek ? 'Recent Activities' : `Activities: ${week.week_start} - ${week.week_end}`;
 
@@ -833,6 +980,18 @@
                 closeCalendar();
             }
         });
+
+        // Chart tab click handlers
+        document.querySelectorAll('.chart-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                const metric = tab.getAttribute('data-metric');
+                switchMetric(metric);
+            });
+        });
+
+        // Initialize tab indicator position after DOM is ready
+        setTimeout(updateTabIndicator, 0);
+        window.addEventListener('resize', updateTabIndicator);
 
         // Initialize
         updateDashboard();

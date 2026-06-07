@@ -45,7 +45,9 @@ struct DayStats {
     day_name: String,
     steps: i32,
     calories: f64,
+    distance_km: f64,
     active_mins: i32,
+    sleep_hours: f64,
     workouts: i32,
 }
 
@@ -337,20 +339,33 @@ async fn get_dashboard_data(
             day_name,
             steps: 0,
             calories: 0.0,
+            distance_km: 0.0,
             active_mins: 0,
+            sleep_hours: 0.0,
             workouts: 0,
         };
 
         for event in &events {
+            // Regular events by start_time
             if let Some(start) = event.start_time {
                 if start.date_naive() == date {
                     day_stats.steps += get_steps(event);
                     day_stats.calories += get_calories(event);
+                    day_stats.distance_km += get_distance_km(event);
                     if !matches!(event.event_type, EventType::Sleep) {
                         day_stats.active_mins += get_duration_mins(event);
                     }
                     if is_workout(event) {
                         day_stats.workouts += 1;
+                    }
+                }
+            }
+            
+            // Sleep by end_time (when you woke up)
+            if matches!(event.event_type, EventType::Sleep) {
+                if let Some(end) = event.end_time {
+                    if end.date_naive() == date {
+                        day_stats.sleep_hours += get_duration_mins(event) as f64 / 60.0;
                     }
                 }
             }
