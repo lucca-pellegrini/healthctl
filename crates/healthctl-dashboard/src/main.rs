@@ -80,9 +80,9 @@ fn format_event_type(event_type: &EventType) -> (String, Option<String>) {
 
 fn connect_to_daemon() -> Result<std::os::unix::net::UnixStream, String> {
     use std::os::unix::net::UnixStream;
-    
+
     let socket_path = healthctl_lib::ipc::socket_path();
-    
+
     match UnixStream::connect(&socket_path) {
         Ok(s) => Ok(s),
         Err(_) => {
@@ -110,15 +110,17 @@ fn connect_to_daemon() -> Result<std::os::unix::net::UnixStream, String> {
 
 fn send_request(request: &Request) -> Result<Response, String> {
     use std::io::{Read, Write};
-    
+
     let mut stream = connect_to_daemon()?;
-    
+
     let request_json = serde_json::to_string(request)
         .map_err(|e| format!("Failed to serialize request: {}", e))?;
 
-    stream.write_all(request_json.as_bytes())
+    stream
+        .write_all(request_json.as_bytes())
         .map_err(|e| format!("Failed to send request: {}", e))?;
-    stream.write_all(b"\n")
+    stream
+        .write_all(b"\n")
         .map_err(|e| format!("Failed to send newline: {}", e))?;
 
     let mut buffer = String::new();
@@ -139,22 +141,22 @@ fn send_request(request: &Request) -> Result<Response, String> {
         }
     }
 
-    serde_json::from_str(buffer.trim())
-        .map_err(|e| format!("Failed to parse response: {}", e))
+    serde_json::from_str(buffer.trim()).map_err(|e| format!("Failed to parse response: {}", e))
 }
 
 fn event_to_activity_item(event: &Event) -> ActivityItem {
     let (event_type, subtype) = format_event_type(&event.event_type);
-    
+
     let duration_mins = match (event.start_time, event.end_time) {
         (Some(s), Some(e)) => Some((e - s).num_minutes()),
         _ => None,
     };
-    
-    let start_time = event.start_time
+
+    let start_time = event
+        .start_time
         .map(|t| t.format("%Y-%m-%d %H:%M").to_string())
         .unwrap_or_else(|| "unknown".to_string());
-    
+
     ActivityItem {
         id: event.id.to_string()[..8].to_string(),
         event_type,
@@ -167,7 +169,9 @@ fn event_to_activity_item(event: &Event) -> ActivityItem {
 }
 
 fn get_calories(event: &Event) -> f64 {
-    event.metrics.get("calories")
+    event
+        .metrics
+        .get("calories")
         .or_else(|| event.metrics.get("calories_kcal"))
         .copied()
         .unwrap_or(0.0)
@@ -195,35 +199,43 @@ fn get_duration_mins(event: &Event) -> i32 {
 }
 
 fn is_workout(event: &Event) -> bool {
-    matches!(event.event_type, 
-        EventType::Strength | 
-        EventType::Activity(_)
+    matches!(
+        event.event_type,
+        EventType::Strength | EventType::Activity(_)
     ) && event.end_time.is_some()
 }
 
 #[tauri::command]
-async fn get_dashboard_data(_state: State<'_, AppState>) -> Result<DashboardData, String> {
+async fn get_dashboard_data(
+    _state: State<'_, AppState>,
+    week_start_date: Option<String>,
+) -> Result<DashboardData, String> {
     use chrono::Datelike;
-    
+
     let now = chrono::Utc::now();
     let today = now.date_naive();
-    
+
     // Calculate week start (Sunday) and end (Saturday)
-    let days_since_sunday = today.weekday().num_days_from_sunday() as i64;
-    let week_start = today - chrono::Duration::days(days_since_sunday);
+    let week_start = if let Some(ref date_str) = week_start_date {
+        chrono::NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
+            .map_err(|e| format!("Invalid date format: {}", e))?
+    } else {
+        let days_since_sunday = today.weekday().num_days_from_sunday() as i64;
+        today - chrono::Duration::days(days_since_sunday)
+    };
     let week_end = week_start + chrono::Duration::days(6);
-    
-    // Fetch events for current week + some buffer for recent activities
-    let fetch_from = week_start - chrono::Duration::days(7); // Extra week for recent activities
-    
+
+    // Fetch events for the selected week only
     let filter = healthctl_lib::ipc::ListFilter {
         event_type: None,
         from: Some(chrono::DateTime::from_naive_utc_and_offset(
-            fetch_from.and_hms_opt(0, 0, 0).unwrap(),
+            week_start.and_hms_opt(0, 0, 0).unwrap(),
             chrono::Utc,
         )),
         to: Some(chrono::DateTime::from_naive_utc_and_offset(
-            (week_end + chrono::Duration::days(1)).and_hms_opt(0, 0, 0).unwrap(),
+            (week_end + chrono::Duration::days(1))
+                .and_hms_opt(0, 0, 0)
+                .unwrap(),
             chrono::Utc,
         )),
         tags: vec![],
@@ -231,20 +243,31 @@ async fn get_dashboard_data(_state: State<'_, AppState>) -> Result<DashboardData
     };
 
     let response = send_request(&Request::List(filter))?;
-    
+
     let events = match response {
         Response::Ok(ResponseData::Events(events)) => events,
         Response::Ok(_) => return Err("Unexpected response type".to_string()),
         Response::Error { message } => return Err(message),
     };
 
-    // Recent activities (last 15, most recent first)
-    let mut sorted_events = events.clone();
+    // Recent activities (within selected week, most recent first)
+    let mut sorted_events: Vec<_> = events
+        .iter()
+        .filter(|e| {
+            // Filter to events within the selected week
+            e.start_time
+                .map(|t| {
+                    let date = t.date_naive();
+                    date >= week_start && date <= week_end
+                })
+                .unwrap_or(false)
+        })
+        .collect();
     sorted_events.sort_by(|a, b| b.start_time.cmp(&a.start_time));
     let recent_activities: Vec<ActivityItem> = sorted_events
         .iter()
-        .take(15)
-        .map(event_to_activity_item)
+        .take(50) // Show more since it's filtered to one week
+        .map(|e| event_to_activity_item(e))
         .collect();
 
     // Weekly summary (Sunday to today)
@@ -265,23 +288,25 @@ async fn get_dashboard_data(_state: State<'_, AppState>) -> Result<DashboardData
     for event in &events {
         // Check if event falls within current week (Sunday to Saturday)
         let event_date = event.start_time.map(|t| t.date_naive());
-        let is_in_week = event_date.map(|d| d >= week_start && d <= week_end).unwrap_or(false);
-        
+        let is_in_week = event_date
+            .map(|d| d >= week_start && d <= week_end)
+            .unwrap_or(false);
+
         if is_in_week {
             week_summary.total_steps += get_steps(event);
             week_summary.total_calories += get_calories(event);
             week_summary.total_distance_km += get_distance_km(event);
-            
+
             // Only count active minutes for non-sleep events
             if !matches!(event.event_type, EventType::Sleep) {
                 week_summary.total_active_mins += get_duration_mins(event);
             }
-            
+
             if is_workout(event) {
                 week_summary.workout_count += 1;
             }
         }
-        
+
         // Sleep that ended within this week
         if matches!(event.event_type, EventType::Sleep) {
             if let Some(end) = event.end_time {
@@ -301,12 +326,12 @@ async fn get_dashboard_data(_state: State<'_, AppState>) -> Result<DashboardData
 
     // Weekly chart stats (Sunday to Saturday)
     let mut weekly = WeeklyStats { days: Vec::new() };
-    
+
     for day_offset in 0..7 {
         let date = week_start + chrono::Duration::days(day_offset);
         let day_name = date.format("%a").to_string();
         let date_str = date.format("%m/%d").to_string();
-        
+
         let mut day_stats = DayStats {
             date: date_str,
             day_name,
@@ -315,7 +340,7 @@ async fn get_dashboard_data(_state: State<'_, AppState>) -> Result<DashboardData
             active_mins: 0,
             workouts: 0,
         };
-        
+
         for event in &events {
             if let Some(start) = event.start_time {
                 if start.date_naive() == date {
@@ -330,7 +355,7 @@ async fn get_dashboard_data(_state: State<'_, AppState>) -> Result<DashboardData
                 }
             }
         }
-        
+
         weekly.days.push(day_stats);
     }
 
