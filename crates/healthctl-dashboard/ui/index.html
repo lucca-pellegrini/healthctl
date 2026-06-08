@@ -125,6 +125,53 @@
         .status-dot.connected { background: var(--accent-secondary); }
         .status-dot.error { background: var(--accent-error); }
 
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .streak-widget {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-primary);
+            border-radius: 6px;
+            padding: 6px 12px;
+            transition: background 0.3s, border-color 0.3s;
+        }
+
+        .streak-icon {
+            font-size: 16px;
+        }
+
+        .streak-value {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--accent-warning);
+        }
+
+        .streak-label {
+            font-size: 10px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        .streak-widget.active {
+            border-color: color-mix(in srgb, var(--accent-warning) 40%, transparent);
+            box-shadow: 0 0 10px color-mix(in srgb, var(--accent-warning) 15%, transparent);
+        }
+
+        .streak-widget.active .streak-icon {
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
         .dashboard {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -1189,6 +1236,13 @@
     <div class="header">
         <h1>⚡ Fitness Dashboard</h1>
         <div class="header-right">
+            <div class="streak-widget" id="streakWidget">
+                <span class="streak-icon">🔥</span>
+                <div>
+                    <div class="streak-value" id="streakValue">0</div>
+                    <div class="streak-label">day streak</div>
+                </div>
+            </div>
             <button class="theme-toggle" id="themeToggle" title="Toggle theme">
                 <span id="themeIcon">☀️</span>
             </button>
@@ -2032,10 +2086,24 @@
                 renderActivities(data.recent_activities);
                 renderCardDetails(data.card_details, data.is_current_week);
                 updateWeekSelectorLabel();
+                updateStreak(data.streak_days);
 
             } catch (error) {
                 console.error('Failed to fetch data:', error);
                 setStatus(false, `Error: ${error}`);
+            }
+        }
+
+        function updateStreak(streakDays) {
+            const widget = document.getElementById('streakWidget');
+            const value = document.getElementById('streakValue');
+            
+            value.textContent = streakDays;
+            
+            if (streakDays > 0) {
+                widget.classList.add('active');
+            } else {
+                widget.classList.remove('active');
             }
         }
 
