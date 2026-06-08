@@ -805,13 +805,73 @@ async fn delete_event(_state: State<'_, AppState>, event_id: String) -> Result<b
     }
 }
 
+/// Get the path to the settings file (same directory as database)
+fn settings_path() -> std::path::PathBuf {
+    if let Some(data_dir) = directories::ProjectDirs::from("", "", "healthctl") {
+        data_dir.data_dir().join("settings.json")
+    } else {
+        std::path::PathBuf::from("settings.json")
+    }
+}
+
+/// Dashboard settings
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct DashboardSettings {
+    #[serde(default)]
+    theme: String, // "dark" or "light"
+}
+
+#[tauri::command]
+async fn get_theme(_state: State<'_, AppState>) -> Result<String, String> {
+    let path = settings_path();
+
+    if !path.exists() {
+        return Ok("dark".to_string()); // Default theme
+    }
+
+    let content =
+        std::fs::read_to_string(&path).map_err(|e| format!("Failed to read settings: {}", e))?;
+
+    let settings: DashboardSettings = serde_json::from_str(&content).unwrap_or_default();
+
+    if settings.theme.is_empty() {
+        Ok("dark".to_string())
+    } else {
+        Ok(settings.theme)
+    }
+}
+
+#[tauri::command]
+async fn set_theme(_state: State<'_, AppState>, theme: String) -> Result<(), String> {
+    let path = settings_path();
+
+    // Ensure parent directory exists
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create settings directory: {}", e))?;
+    }
+
+    let settings = DashboardSettings { theme };
+    let content = serde_json::to_string_pretty(&settings)
+        .map_err(|e| format!("Failed to serialize settings: {}", e))?;
+
+    std::fs::write(&path, content).map_err(|e| format!("Failed to write settings: {}", e))?;
+
+    Ok(())
+}
+
 fn main() {
     let app_state = AppState {};
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .manage(app_state)
-        .invoke_handler(tauri::generate_handler![get_dashboard_data, delete_event])
+        .invoke_handler(tauri::generate_handler![
+            get_dashboard_data,
+            delete_event,
+            get_theme,
+            set_theme
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

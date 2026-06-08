@@ -14,4 +14,5 @@ serde_json = { workspace = true }
 healthctl-lib = { workspace = true }
 tokio = { workspace = true }
 chrono = { workspace = true }
+directories = { workspace = true }
 dirs = "5"
