@@ -362,13 +362,75 @@ impl Database {
         .fetch_one(&self.pool)
         .await?;
 
+        // Calculate streak: consecutive days with at least one activity (excluding sleep)
+        let streak_days = self.calculate_streak().await?;
+
         Ok(healthctl_lib::ipc::StatusSummary {
             today_events: today_events.0 as u32,
             today_calories: today_calories.0,
             today_active_minutes: today_active.0 / 60.0,
             week_events: week_events.0 as u32,
-            streak_days: 0, // TODO: calculate streak
+            streak_days,
         })
+    }
+
+    /// Calculate the current activity streak (consecutive days with at least one non-sleep event).
+    /// Counts backwards from today. If today has no activity yet, we check if yesterday
+    /// continues a streak (allowing the user to maintain their streak until end of day).
+    async fn calculate_streak(&self) -> Result<u32> {
+        let today = chrono::Local::now().date_naive();
+
+        // Get distinct dates with non-sleep activity, ordered descending
+        // We look back up to 365 days to find the streak
+        let lookback_start = today - chrono::Duration::days(365);
+        let lookback_ts = chrono::Local
+            .from_local_datetime(&lookback_start.and_hms_opt(0, 0, 0).unwrap())
+            .single()
+            .unwrap()
+            .with_timezone(&Utc)
+            .to_rfc3339();
+
+        let rows: Vec<(String,)> = sqlx::query_as(
+            "SELECT DISTINCT DATE(COALESCE(start_time, end_time, created_at)) as activity_date
+             FROM events
+             WHERE event_type NOT LIKE '%Sleep%'
+             AND COALESCE(start_time, end_time, created_at) >= ?
+             ORDER BY activity_date DESC",
+        )
+        .bind(&lookback_ts)
+        .fetch_all(&self.pool)
+        .await?;
+
+        if rows.is_empty() {
+            return Ok(0);
+        }
+
+        // Parse dates and count consecutive days
+        let mut streak = 0u32;
+        let mut expected_date = today;
+
+        // If today has no activity, check if we should start from yesterday
+        // (grace period - streak isn't broken until the day ends)
+        let first_date = chrono::NaiveDate::parse_from_str(&rows[0].0, "%Y-%m-%d")?;
+        if first_date != today {
+            // Today has no activity yet, start checking from yesterday
+            expected_date = today - chrono::Duration::days(1);
+        }
+
+        for (date_str,) in &rows {
+            let date = chrono::NaiveDate::parse_from_str(date_str, "%Y-%m-%d")?;
+
+            if date == expected_date {
+                streak += 1;
+                expected_date = expected_date - chrono::Duration::days(1);
+            } else if date < expected_date {
+                // Gap in dates, streak is broken
+                break;
+            }
+            // If date > expected_date, skip (shouldn't happen with ORDER BY DESC)
+        }
+
+        Ok(streak)
     }
 
     pub async fn get_report(

@@ -137,6 +137,7 @@ struct DashboardData {
     card_details: CardDetails,
     is_current_week: bool,
     connection_status: String,
+    streak_days: u32,
 }
 
 struct AppState {}
@@ -362,6 +363,12 @@ async fn get_dashboard_data(
         Response::Ok(ResponseData::Events(events)) => events,
         Response::Ok(_) => return Err("Unexpected response type".to_string()),
         Response::Error { message } => return Err(message),
+    };
+
+    // Fetch status to get streak
+    let streak_days = match send_request(&Request::Status) {
+        Ok(Response::Ok(ResponseData::Summary(summary))) => summary.streak_days,
+        _ => 0, // Default to 0 if we can't get the streak
     };
 
     // Filter events for different periods
@@ -786,6 +793,7 @@ async fn get_dashboard_data(
         card_details,
         is_current_week,
         connection_status: format!("Connected ({} events)", events.len()),
+        streak_days,
     })
 }
 

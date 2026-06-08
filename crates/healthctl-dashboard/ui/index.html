@@ -54,6 +54,52 @@
         .status-dot.connected { background: #00ff88; }
         .status-dot.error { background: #ff4444; }
 
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .streak-widget {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 6px;
+            padding: 6px 12px;
+        }
+
+        .streak-icon {
+            font-size: 16px;
+        }
+
+        .streak-value {
+            font-size: 18px;
+            font-weight: 700;
+            color: #ff8844;
+        }
+
+        .streak-label {
+            font-size: 10px;
+            color: #666;
+            text-transform: uppercase;
+        }
+
+        .streak-widget.active {
+            border-color: #ff884466;
+            box-shadow: 0 0 10px #ff884422;
+        }
+
+        .streak-widget.active .streak-icon {
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
         .dashboard {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -946,9 +992,18 @@
 <body>
     <div class="header">
         <h1>⚡ Fitness Dashboard</h1>
-        <div class="status">
-            <div class="status-dot" id="statusDot"></div>
-            <span id="statusText">Connecting...</span>
+        <div class="header-right">
+            <div class="streak-widget" id="streakWidget">
+                <span class="streak-icon">🔥</span>
+                <div>
+                    <div class="streak-value" id="streakValue">0</div>
+                    <div class="streak-label">day streak</div>
+                </div>
+            </div>
+            <div class="status">
+                <div class="status-dot" id="statusDot"></div>
+                <span id="statusText">Connecting...</span>
+            </div>
         </div>
     </div>
 
@@ -1727,10 +1782,24 @@
                 renderActivities(data.recent_activities);
                 renderCardDetails(data.card_details, data.is_current_week);
                 updateWeekSelectorLabel();
+                updateStreak(data.streak_days);
 
             } catch (error) {
                 console.error('Failed to fetch data:', error);
                 setStatus(false, `Error: ${error}`);
+            }
+        }
+
+        function updateStreak(streakDays) {
+            const widget = document.getElementById('streakWidget');
+            const value = document.getElementById('streakValue');
+            
+            value.textContent = streakDays;
+            
+            if (streakDays > 0) {
+                widget.classList.add('active');
+            } else {
+                widget.classList.remove('active');
             }
         }
 
