@@ -789,13 +789,29 @@ async fn get_dashboard_data(
     })
 }
 
+#[tauri::command]
+async fn delete_event(_state: State<'_, AppState>, event_id: String) -> Result<bool, String> {
+    // The event_id from the frontend is the short 8-char prefix
+    let request = Request::DeleteByPrefix {
+        prefix: event_id.clone(),
+    };
+
+    let response = send_request(&request)?;
+
+    match response {
+        Response::Ok(ResponseData::Ack) => Ok(true),
+        Response::Error { message } => Err(message),
+        _ => Err("Unexpected response from daemon".to_string()),
+    }
+}
+
 fn main() {
     let app_state = AppState {};
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .manage(app_state)
-        .invoke_handler(tauri::generate_handler![get_dashboard_data])
+        .invoke_handler(tauri::generate_handler![get_dashboard_data, delete_event])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
