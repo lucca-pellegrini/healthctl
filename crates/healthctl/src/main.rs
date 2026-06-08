@@ -51,6 +51,46 @@ fn main() -> Result<()> {
                 _ => anyhow::bail!("unexpected response from daemon"),
             }
         }
+        cli::Command::Remove { event_id, yes } => {
+            // First fetch the event to show what will be deleted
+            let get_request = resolve_get_request(&event_id);
+            let get_response = client::send_request(get_request)?;
+            match get_response {
+                Response::Ok(ResponseData::Event(event)) => {
+                    // Show what will be deleted
+                    client::print_event_summary_for_delete(&event);
+
+                    // Confirm unless -y flag was passed
+                    if !yes {
+                        print!("Delete this event? [y/N] ");
+                        std::io::Write::flush(&mut std::io::stdout())?;
+                        let mut input = String::new();
+                        std::io::stdin().read_line(&mut input)?;
+                        if !input.trim().eq_ignore_ascii_case("y") {
+                            println!("Cancelled.");
+                            return Ok(());
+                        }
+                    }
+
+                    // Perform the deletion
+                    let delete_request = resolve_delete_request(&event_id);
+                    let response = client::send_request(delete_request)?;
+                    match response {
+                        Response::Ok(ResponseData::Ack) => {
+                            println!("Deleted event {}", &event.id.to_string()[..8]);
+                        }
+                        Response::Error { message } => {
+                            anyhow::bail!("{message}");
+                        }
+                        _ => anyhow::bail!("unexpected response from daemon"),
+                    }
+                }
+                Response::Error { message } => {
+                    anyhow::bail!("{message}");
+                }
+                _ => anyhow::bail!("unexpected response from daemon"),
+            }
+        }
         cli::Command::Status => {
             let response = client::send_request(Request::Status)?;
             client::print_response(response);
@@ -73,6 +113,16 @@ fn resolve_get_request(event_id: &str) -> Request {
     match uuid::Uuid::parse_str(event_id) {
         Ok(id) => Request::Get { id },
         Err(_) => Request::GetByPrefix {
+            prefix: event_id.to_string(),
+        },
+    }
+}
+
+/// If the event_id parses as a full UUID, use Delete; otherwise use DeleteByPrefix.
+fn resolve_delete_request(event_id: &str) -> Request {
+    match uuid::Uuid::parse_str(event_id) {
+        Ok(id) => Request::Delete { id },
+        Err(_) => Request::DeleteByPrefix {
             prefix: event_id.to_string(),
         },
     }

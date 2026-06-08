@@ -124,6 +124,37 @@ fn print_event_summary(event: &healthctl_lib::event::Event) {
     );
 }
 
+/// Print a brief event summary for deletion confirmation.
+pub fn print_event_summary_for_delete(event: &healthctl_lib::event::Event) {
+    let time_str = event
+        .start_time
+        .map(|t| t.format("%Y-%m-%d %H:%M").to_string())
+        .or_else(|| {
+            event
+                .end_time
+                .map(|t| t.format("%Y-%m-%d %H:%M").to_string())
+        })
+        .unwrap_or_else(|| "no time".into());
+
+    let duration_str = event
+        .duration_secs()
+        .map(|d| format_duration(d))
+        .unwrap_or_else(|| "".into());
+
+    let type_str = format!("{:?}", event.event_type);
+
+    println!("Event to delete:");
+    println!("  ID:       {}", event.id);
+    println!("  Type:     {}", type_str);
+    println!("  Time:     {}", time_str);
+    if !duration_str.is_empty() {
+        println!("  Duration: {}", duration_str);
+    }
+    if !event.tags.is_empty() {
+        println!("  Tags:     {}", event.tags.join(", "));
+    }
+}
+
 /// Print a single event in full detail.
 pub fn print_event_detail(response: Response) -> Result<()> {
     match response {
