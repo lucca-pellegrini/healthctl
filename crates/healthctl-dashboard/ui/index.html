@@ -562,7 +562,7 @@
 
         .activity-item {
             display: grid;
-            grid-template-columns: 70px 1fr auto;
+            grid-template-columns: 70px 1fr auto auto;
             gap: 12px;
             padding: 10px 0;
             border-bottom: 1px solid #1a1a1a;
@@ -616,6 +616,130 @@
             font-size: 12px;
             color: #00ff88;
             font-family: monospace;
+        }
+
+        .activity-delete {
+            opacity: 0;
+            background: none;
+            border: 1px solid #ff444466;
+            color: #ff4444;
+            width: 24px;
+            height: 24px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .activity-item:hover .activity-delete {
+            opacity: 1;
+        }
+
+        .activity-delete:hover {
+            background: #ff444422;
+            border-color: #ff4444;
+        }
+
+        .activity-delete:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        /* Delete confirmation dialog */
+        .delete-dialog {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(4px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 3000;
+        }
+
+        .delete-dialog.show {
+            display: flex;
+        }
+
+        .delete-dialog-content {
+            background: #111;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 20px;
+            max-width: 360px;
+            width: 90%;
+        }
+
+        .delete-dialog-title {
+            font-size: 16px;
+            font-weight: 500;
+            color: #e0e0e0;
+            margin-bottom: 8px;
+        }
+
+        .delete-dialog-message {
+            font-size: 13px;
+            color: #888;
+            margin-bottom: 16px;
+        }
+
+        .delete-dialog-event {
+            background: #1a1a1a;
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 16px;
+            font-size: 12px;
+        }
+
+        .delete-dialog-event-type {
+            color: #00d4ff;
+            font-weight: 500;
+        }
+
+        .delete-dialog-event-time {
+            color: #666;
+            margin-top: 4px;
+        }
+
+        .delete-dialog-buttons {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+        }
+
+        .delete-dialog-btn {
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .delete-dialog-btn.cancel {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            color: #888;
+        }
+
+        .delete-dialog-btn.cancel:hover {
+            background: #222;
+            color: #e0e0e0;
+        }
+
+        .delete-dialog-btn.confirm {
+            background: #ff444433;
+            border: 1px solid #ff444466;
+            color: #ff4444;
+        }
+
+        .delete-dialog-btn.confirm:hover {
+            background: #ff444455;
         }
 
         /* Weekly Chart */
@@ -1078,6 +1202,22 @@
         </div>
     </div>
 
+    <!-- Delete Confirmation Dialog -->
+    <div class="delete-dialog" id="deleteDialog">
+        <div class="delete-dialog-content">
+            <div class="delete-dialog-title">Delete Event?</div>
+            <div class="delete-dialog-message">This action cannot be undone.</div>
+            <div class="delete-dialog-event" id="deleteDialogEvent">
+                <div class="delete-dialog-event-type" id="deleteEventType"></div>
+                <div class="delete-dialog-event-time" id="deleteEventTime"></div>
+            </div>
+            <div class="delete-dialog-buttons">
+                <button class="delete-dialog-btn cancel" id="deleteCancelBtn">Cancel</button>
+                <button class="delete-dialog-btn confirm" id="deleteConfirmBtn">Delete</button>
+            </div>
+        </div>
+    </div>
+
     <script type="module">
         const { invoke } = window.__TAURI__.core;
 
@@ -1153,7 +1293,7 @@
                 const date = activity.start_time.split(' ')[0] || '';
 
                 return `
-                    <div class="activity-item">
+                    <div class="activity-item" data-event-id="${activity.id}">
                         <div class="activity-time">
                             <div>${time}</div>
                             <div style="color:#444;font-size:10px">${date}</div>
@@ -1168,9 +1308,18 @@
                             ` : ''}
                         </div>
                         <div class="activity-duration">${duration}</div>
+                        <button class="activity-delete" title="Delete event" data-id="${activity.id}" data-type="${activity.event_type}${activity.subtype ? ' ' + activity.subtype : ''}" data-time="${activity.start_time}">✕</button>
                     </div>
                 `;
             }).join('');
+
+            // Add delete button event listeners
+            container.querySelectorAll('.activity-delete').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    showDeleteDialog(btn.dataset.id, btn.dataset.type, btn.dataset.time);
+                });
+            });
         }
 
         function getMetricValue(day, metric) {
@@ -1831,6 +1980,49 @@
         function closeCalendar() {
             document.getElementById('calendarDropdown').classList.remove('show');
         }
+
+        // Delete dialog state
+        let deleteEventId = null;
+
+        function showDeleteDialog(eventId, eventType, eventTime) {
+            deleteEventId = eventId;
+            document.getElementById('deleteEventType').textContent = eventType;
+            document.getElementById('deleteEventTime').textContent = eventTime;
+            document.getElementById('deleteDialog').classList.add('show');
+        }
+
+        function hideDeleteDialog() {
+            document.getElementById('deleteDialog').classList.remove('show');
+            deleteEventId = null;
+        }
+
+        async function confirmDelete() {
+            if (!deleteEventId) return;
+
+            const btn = document.getElementById('deleteConfirmBtn');
+            btn.disabled = true;
+            btn.textContent = 'Deleting...';
+
+            try {
+                await invoke('delete_event', { eventId: deleteEventId });
+                hideDeleteDialog();
+                // Refresh the dashboard to reflect the deletion
+                await updateDashboard();
+            } catch (err) {
+                console.error('Failed to delete event:', err);
+                alert('Failed to delete event: ' + err);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Delete';
+            }
+        }
+
+        // Delete dialog event listeners
+        document.getElementById('deleteCancelBtn').addEventListener('click', hideDeleteDialog);
+        document.getElementById('deleteConfirmBtn').addEventListener('click', confirmDelete);
+        document.getElementById('deleteDialog').addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) hideDeleteDialog();
+        });
 
         // Calendar event listeners
         document.getElementById('weekSelectorBtn').addEventListener('click', (e) => {
