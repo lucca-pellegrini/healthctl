@@ -14,6 +14,8 @@ pub async fn handle_request(request: Request, db: &Database) -> Response {
         } => handle_clone(source_id, overrides, db).await,
         Request::Get { id } => handle_get(id, db).await,
         Request::GetByPrefix { prefix } => handle_get_by_prefix(prefix, db).await,
+        Request::Delete { id } => handle_delete(id, db).await,
+        Request::DeleteByPrefix { prefix } => handle_delete_by_prefix(prefix, db).await,
         Request::Update(event) => handle_update(event, db).await,
         Request::List(filter) => handle_list(filter, db).await,
         Request::Status => handle_status(db).await,
@@ -134,6 +136,36 @@ async fn handle_get(id: Uuid, db: &Database) -> Response {
 async fn handle_get_by_prefix(prefix: String, db: &Database) -> Response {
     match db.get_event_by_prefix(&prefix).await {
         Ok(Some(event)) => Response::Ok(ResponseData::Event(event)),
+        Ok(None) => Response::Error {
+            message: format!("no event matching prefix '{prefix}'"),
+        },
+        Err(e) => Response::Error {
+            message: e.to_string(),
+        },
+    }
+}
+
+async fn handle_delete(id: Uuid, db: &Database) -> Response {
+    match db.delete_event(id).await {
+        Ok(true) => {
+            tracing::info!(id = %id, "event deleted");
+            Response::Ok(ResponseData::Ack)
+        }
+        Ok(false) => Response::Error {
+            message: format!("event {id} not found"),
+        },
+        Err(e) => Response::Error {
+            message: format!("database error: {e}"),
+        },
+    }
+}
+
+async fn handle_delete_by_prefix(prefix: String, db: &Database) -> Response {
+    match db.delete_event_by_prefix(&prefix).await {
+        Ok(Some(id)) => {
+            tracing::info!(id = %id, prefix = %prefix, "event deleted by prefix");
+            Response::Ok(ResponseData::Ack)
+        }
         Ok(None) => Response::Error {
             message: format!("no event matching prefix '{prefix}'"),
         },

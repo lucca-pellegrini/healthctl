@@ -189,6 +189,31 @@ impl Database {
         }
     }
 
+    pub async fn delete_event(&self, id: Uuid) -> Result<bool> {
+        let id_str = id.to_string();
+
+        // Foreign keys with ON DELETE CASCADE should handle related tables
+        let result = sqlx::query("DELETE FROM events WHERE id = ?")
+            .bind(&id_str)
+            .execute(&self.pool)
+            .await?;
+
+        Ok(result.rows_affected() > 0)
+    }
+
+    pub async fn delete_event_by_prefix(&self, prefix: &str) -> Result<Option<Uuid>> {
+        // First find the event to ensure uniqueness
+        let event = self.get_event_by_prefix(prefix).await?;
+
+        match event {
+            Some(e) => {
+                self.delete_event(e.id).await?;
+                Ok(Some(e.id))
+            }
+            None => Ok(None),
+        }
+    }
+
     pub async fn update_event(&self, event: &Event) -> Result<()> {
         let id = event.id.to_string();
 

@@ -18,6 +18,10 @@ pub enum Request {
     Get { id: Uuid },
     /// Get an event by ID prefix (short IDs).
     GetByPrefix { prefix: String },
+    /// Delete an event by full ID.
+    Delete { id: Uuid },
+    /// Delete an event by ID prefix (short IDs).
+    DeleteByPrefix { prefix: String },
     /// Update an event (after editing).
     Update(Event),
     /// List events matching a filter.

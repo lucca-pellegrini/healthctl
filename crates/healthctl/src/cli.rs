@@ -32,6 +32,15 @@ pub enum Command {
         /// Event ID (full or prefix).
         event_id: String,
     },
+    /// Remove (delete) an event.
+    #[command(alias = "rm")]
+    Remove {
+        /// Event ID (full or prefix).
+        event_id: String,
+        /// Skip confirmation prompt.
+        #[arg(short = 'y', long)]
+        yes: bool,
+    },
     /// Show today's status summary.
     Status,
     /// Generate a report.
