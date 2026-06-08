@@ -1530,6 +1530,7 @@ name = "healthctl-dashboard"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "directories",
  "dirs 5.0.1",
  "healthctl-lib",
  "serde",
