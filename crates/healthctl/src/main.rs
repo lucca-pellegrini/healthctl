@@ -1,6 +1,7 @@
 mod cli;
 mod client;
 mod daemon_ctl;
+mod format;
 
 use anyhow::Result;
 use healthctl_lib::ipc::{Request, Response, ResponseData};
