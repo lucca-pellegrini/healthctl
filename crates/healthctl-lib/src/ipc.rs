@@ -55,13 +55,16 @@ pub enum ResponseData {
     Ack,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ListFilter {
     pub event_type: Option<String>,
     pub from: Option<chrono::DateTime<chrono::Utc>>,
     pub to: Option<chrono::DateTime<chrono::Utc>>,
     pub tags: Vec<String>,
     pub limit: Option<u32>,
+    /// If true, return most recent first; otherwise chronological (oldest first).
+    #[serde(default)]
+    pub reverse: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
