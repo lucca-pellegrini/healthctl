@@ -522,6 +522,64 @@ impl Database {
         Ok(events)
     }
 
+    /// Event candidates for shell completion: short id + a human-readable
+    /// description (emoji, type, date and tags), ordered most-recent first.
+    ///
+    /// `prefix` filters on the (full) id so that partially-typed short ids
+    /// still match. `limit` caps the number of candidates to keep completion
+    /// snappy and avoid straining SQLite.
+    pub async fn complete_events(
+        &self,
+        prefix: Option<&str>,
+        limit: u32,
+    ) -> Result<Vec<healthctl_lib::ipc::EventCompletion>> {
+        let mut sql = String::from(
+            "SELECT id, event_type, start_time, end_time, created_at FROM events WHERE 1=1",
+        );
+        let mut binds: Vec<String> = Vec::new();
+
+        if let Some(prefix) = prefix.filter(|p| !p.is_empty()) {
+            sql.push_str(" AND id LIKE ?");
+            binds.push(format!("{prefix}%"));
+        }
+
+        // Most-recent first (chronological, like `git show`'s newest-first list).
+        sql.push_str(" ORDER BY COALESCE(start_time, end_time, created_at) DESC");
+        sql.push_str(&format!(" LIMIT {limit}"));
+
+        let mut query = sqlx::query_as::<_, EventRow>(&sql);
+        for bind in &binds {
+            query = query.bind(bind);
+        }
+        let rows = query.fetch_all(&self.pool).await?;
+
+        let mut out = Vec::with_capacity(rows.len());
+        for row in rows {
+            let mut event = row.into_event()?;
+            self.load_event_details(&mut event).await?;
+            out.push(event_completion(&event));
+        }
+        Ok(out)
+    }
+
+    /// Recently-used tags, ordered by the most recent event carrying each tag
+    /// (most-recent first), capped at `limit` to avoid straining SQLite.
+    pub async fn recent_tags(&self, limit: u32) -> Result<Vec<String>> {
+        let rows: Vec<(String,)> = sqlx::query_as(
+            "SELECT t.tag
+             FROM event_tags t
+             JOIN events e ON e.id = t.event_id
+             GROUP BY t.tag
+             ORDER BY MAX(COALESCE(e.start_time, e.end_time, e.created_at)) DESC
+             LIMIT ?",
+        )
+        .bind(limit as i64)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows.into_iter().map(|(t,)| t).collect())
+    }
+
     async fn load_event_details(&self, event: &mut Event) -> Result<()> {
         let id = event.id.to_string();
 
@@ -550,6 +608,32 @@ impl Database {
         event.exercises = exercises.into_iter().map(|r| r.into_exercise()).collect();
 
         Ok(())
+    }
+}
+
+/// Build a shell-completion candidate from a fully-loaded event.
+///
+/// The description mirrors the columns a user sees in `healthctl list`
+/// (type + date + tags) so the completion menu tells them what each id is.
+fn event_completion(event: &Event) -> healthctl_lib::ipc::EventCompletion {
+    // Format to match the `healthctl list` table (which renders the stored
+    // UTC timestamp directly) so the same event reads identically in both.
+    let when = event.anchor_time().format("%b %d %H:%M");
+
+    let mut description = format!(
+        "{} {} · {}",
+        event.event_type.emoji(),
+        event.event_type.label(),
+        when
+    );
+    if !event.tags.is_empty() {
+        description.push_str(" · ");
+        description.push_str(&event.tags.join(", "));
+    }
+
+    healthctl_lib::ipc::EventCompletion {
+        short_id: event.id.to_string()[..8].to_string(),
+        description,
     }
 }
 

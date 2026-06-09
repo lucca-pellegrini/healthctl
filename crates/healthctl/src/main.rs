@@ -1,5 +1,6 @@
 mod cli;
 mod client;
+mod complete;
 mod daemon_ctl;
 mod dashboard_ctl;
 mod format;
@@ -114,6 +115,9 @@ fn main() -> Result<()> {
         }
         cli::Command::Dashboard => {
             dashboard_ctl::handle()?;
+        }
+        cli::Command::Complete(complete_cmd) => {
+            complete::run(complete_cmd.kind);
         }
     }
 

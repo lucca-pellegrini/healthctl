@@ -20,6 +20,10 @@ pub async fn handle_request(request: Request, db: &Database) -> Response {
         Request::List(filter) => handle_list(filter, db).await,
         Request::Status => handle_status(db).await,
         Request::Report { period } => handle_report(period, db).await,
+        Request::CompleteEvents { prefix, limit } => {
+            handle_complete_events(prefix, limit, db).await
+        }
+        Request::CompleteTags { limit } => handle_complete_tags(limit, db).await,
         Request::Shutdown => {
             // The shutdown signal is handled by the main loop; just ack here.
             Response::Ok(ResponseData::Ack)
@@ -214,6 +218,36 @@ async fn handle_status(db: &Database) -> Response {
 async fn handle_report(period: ReportPeriod, db: &Database) -> Response {
     match db.get_report(&period).await {
         Ok(report) => Response::Ok(ResponseData::Report(report)),
+        Err(e) => Response::Error {
+            message: format!("database error: {e}"),
+        },
+    }
+}
+
+/// Default cap on completion candidates — enough to be useful, small enough
+/// not to strain SQLite or flood the completion menu.
+const DEFAULT_COMPLETE_LIMIT: u32 = 50;
+/// Tags are capped lower per the design (at most ~30 recent tags).
+const DEFAULT_TAG_LIMIT: u32 = 30;
+
+async fn handle_complete_events(
+    prefix: Option<String>,
+    limit: Option<u32>,
+    db: &Database,
+) -> Response {
+    let limit = limit.unwrap_or(DEFAULT_COMPLETE_LIMIT);
+    match db.complete_events(prefix.as_deref(), limit).await {
+        Ok(candidates) => Response::Ok(ResponseData::Completions(candidates)),
+        Err(e) => Response::Error {
+            message: format!("database error: {e}"),
+        },
+    }
+}
+
+async fn handle_complete_tags(limit: Option<u32>, db: &Database) -> Response {
+    let limit = limit.unwrap_or(DEFAULT_TAG_LIMIT).min(DEFAULT_TAG_LIMIT);
+    match db.recent_tags(limit).await {
+        Ok(tags) => Response::Ok(ResponseData::Tags(tags)),
         Err(e) => Response::Error {
             message: format!("database error: {e}"),
         },

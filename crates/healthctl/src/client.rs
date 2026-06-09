@@ -41,6 +41,32 @@ pub fn send_request(request: Request) -> Result<Response> {
     Ok(response)
 }
 
+/// Send a request without auto-spawning the daemon, with a short timeout.
+///
+/// Used by shell completion: if the daemon isn't already running we return an
+/// error rather than paying the cost of spawning it (and blocking the user's
+/// <TAB>). Callers should degrade gracefully (emit no candidates) on `Err`.
+pub fn try_send_request(request: Request) -> Result<Response> {
+    let socket_path = ipc::socket_path();
+    let stream = UnixStream::connect(&socket_path).context("daemon not running")?;
+
+    stream.set_read_timeout(Some(Duration::from_secs(2)))?;
+    stream.set_write_timeout(Some(Duration::from_secs(2)))?;
+
+    let mut stream = stream;
+    let payload = serde_json::to_string(&request)?;
+    writeln!(stream, "{payload}")?;
+    stream.flush()?;
+
+    let mut reader = BufReader::new(&stream);
+    let mut response_line = String::new();
+    reader.read_line(&mut response_line)?;
+
+    let response: Response =
+        serde_json::from_str(&response_line).context("failed to parse daemon response")?;
+    Ok(response)
+}
+
 /// Print a response to stdout in a human-readable way.
 pub fn print_response(response: Response) {
     match response {
@@ -58,6 +84,18 @@ pub fn print_response(response: Response) {
             }
             ResponseData::Report(report) => {
                 format::print_report(&report, &[]);
+            }
+            // Completion payloads are consumed by the `__complete` path, not
+            // printed for humans; emit one item per line as a sane fallback.
+            ResponseData::Completions(candidates) => {
+                for c in candidates {
+                    println!("{}\t{}", c.short_id, c.description);
+                }
+            }
+            ResponseData::Tags(tags) => {
+                for tag in tags {
+                    println!("{tag}");
+                }
             }
         },
         Response::Error { message } => {
