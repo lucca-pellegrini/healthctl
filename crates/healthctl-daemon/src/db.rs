@@ -466,53 +466,60 @@ impl Database {
         &self,
         period: &healthctl_lib::ipc::ReportPeriod,
     ) -> Result<healthctl_lib::ipc::ReportData> {
+        use healthctl_lib::ipc::ReportPeriod;
+
         let now = Utc::now();
         let days = match period {
-            healthctl_lib::ipc::ReportPeriod::Day => 1,
-            healthctl_lib::ipc::ReportPeriod::Week => 7,
-            healthctl_lib::ipc::ReportPeriod::Month => 30,
-            healthctl_lib::ipc::ReportPeriod::Year => 365,
+            ReportPeriod::Day => 1,
+            ReportPeriod::Week => 7,
+            ReportPeriod::Month => 30,
+            ReportPeriod::Year => 365,
         };
+
+        // The current period is the last `days` ending now (in progress).
+        let to = now;
         let from = now - chrono::Duration::days(days);
-        let ts = from.to_rfc3339();
+        // Fetch enough history for the previous period and the 4-period baseline.
+        let fetch_from = from - chrono::Duration::days(days * 4);
 
-        let total_events: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM events WHERE COALESCE(start_time, end_time, created_at) >= ?",
+        let events = self.events_between(fetch_from, to).await?;
+
+        Ok(healthctl_lib::report::compute_report(
+            &events,
+            period.clone(),
+            from,
+            to,
+            now,
+            // A trailing-window report is always "current" / in-progress.
+            true,
+        ))
+    }
+
+    /// Fetch all fully-detailed events whose anchor time falls in `[from, to)`.
+    /// Used by report aggregation, which needs the raw events to compute
+    /// breakdowns, comparisons, and projections in `healthctl_lib::report`.
+    async fn events_between(&self, from: DateTime<Utc>, to: DateTime<Utc>) -> Result<Vec<Event>> {
+        let from_ts = from.to_rfc3339();
+        let to_ts = to.to_rfc3339();
+
+        let rows = sqlx::query_as::<_, EventRow>(
+            "SELECT id, event_type, start_time, end_time, created_at FROM events
+             WHERE COALESCE(start_time, end_time, created_at) >= ?
+               AND COALESCE(start_time, end_time, created_at) < ?
+             ORDER BY COALESCE(start_time, end_time, created_at) ASC",
         )
-        .bind(&ts)
-        .fetch_one(&self.pool)
+        .bind(&from_ts)
+        .bind(&to_ts)
+        .fetch_all(&self.pool)
         .await?;
 
-        let total_calories: (f64,) = sqlx::query_as(
-            "SELECT COALESCE(SUM(em.value), 0.0) FROM event_metrics em
-             JOIN events e ON em.event_id = e.id
-             WHERE em.key = 'calories_kcal'
-             AND COALESCE(e.start_time, e.end_time, e.created_at) >= ?",
-        )
-        .bind(&ts)
-        .fetch_one(&self.pool)
-        .await?;
-
-        let total_active: (f64,) = sqlx::query_as(
-            "SELECT COALESCE(SUM(
-                (julianday(end_time) - julianday(start_time)) * 86400.0
-             ), 0.0) FROM events
-             WHERE event_type NOT LIKE '%sleep%'
-             AND start_time IS NOT NULL AND end_time IS NOT NULL
-             AND COALESCE(start_time, end_time, created_at) >= ?",
-        )
-        .bind(&ts)
-        .fetch_one(&self.pool)
-        .await?;
-
-        Ok(healthctl_lib::ipc::ReportData {
-            period: period.clone(),
-            total_events: total_events.0 as u32,
-            total_calories: total_calories.0,
-            total_active_minutes: total_active.0 / 60.0,
-            avg_daily_calories: total_calories.0 / days as f64,
-            avg_daily_active_minutes: (total_active.0 / 60.0) / days as f64,
-        })
+        let mut events = Vec::with_capacity(rows.len());
+        for row in rows {
+            let mut event = row.into_event()?;
+            self.load_event_details(&mut event).await?;
+            events.push(event);
+        }
+        Ok(events)
     }
 
     async fn load_event_details(&self, event: &mut Event) -> Result<()> {
