@@ -57,7 +57,7 @@ pub fn print_response(response: Response) {
                 format::print_status(&summary);
             }
             ResponseData::Report(report) => {
-                format::print_report(&report, None);
+                format::print_report(&report, &[]);
             }
         },
         Response::Error { message } => {
