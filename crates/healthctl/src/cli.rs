@@ -49,6 +49,29 @@ pub enum Command {
     Daemon(DaemonCommand),
     /// Launch the Tauri dashboard UI in the background.
     Dashboard,
+    /// Internal: emit machine-readable candidates for shell completion.
+    ///
+    /// Hidden from `--help`; invoked by the generated `_healthctl` zsh
+    /// completion function. Not part of the public CLI surface.
+    #[command(name = "__complete", hide = true)]
+    Complete(CompleteCommand),
+}
+
+#[derive(Parser)]
+pub struct CompleteCommand {
+    #[command(subcommand)]
+    pub kind: CompleteKind,
+}
+
+#[derive(Subcommand)]
+pub enum CompleteKind {
+    /// Emit event candidates as `short_id\tdescription` lines, newest first.
+    Events {
+        /// Optional short-id prefix already typed by the user.
+        prefix: Option<String>,
+    },
+    /// Emit recently-used tags, one per line, most-recent first.
+    Tags,
 }
 
 #[derive(Parser)]

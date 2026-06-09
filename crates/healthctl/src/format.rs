@@ -50,29 +50,10 @@ pub fn pad_left(colored: &str, plain: &str, width: usize) -> String {
 }
 
 /// Get emoji for event type.
+///
+/// Thin wrapper over [`EventType::emoji`] so existing call sites keep working.
 pub fn event_emoji(event_type: &EventType) -> &'static str {
-    match event_type {
-        EventType::Activity(kind) => match kind {
-            ActivityKind::Run => "🏃",
-            ActivityKind::Walk => "🚶",
-            ActivityKind::Cycle => "🚴",
-            ActivityKind::Swim => "🏊",
-            ActivityKind::Hike => "🥾",
-            ActivityKind::Other(_) => "🏋️",
-        },
-        EventType::Strength => "💪",
-        EventType::Sleep => "😴",
-        EventType::Nutrition => "🍽️",
-        EventType::Hydration => "💧",
-        EventType::Substance => "💊",
-        EventType::Mental(kind) => match kind {
-            MentalKind::Meditation => "🧘",
-            MentalKind::Relaxation => "🌿",
-            MentalKind::Prayer => "🙏",
-            MentalKind::Journaling => "📝",
-            MentalKind::Other(_) => "🧠",
-        },
-    }
+    event_type.emoji()
 }
 
 /// Format event type as a colored, pretty string.
