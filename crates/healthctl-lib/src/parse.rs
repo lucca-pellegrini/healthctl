@@ -180,9 +180,11 @@ fn local_naive_to_utc(dt: chrono::NaiveDateTime) -> DateTime<Utc> {
 }
 
 /// Parse relative date expressions for queries: "today", "yesterday", "7 days", etc.
+/// Also supports ISO 8601 dates: "2026-06-01", "2001-01-01", "2026-06-01T10:00"
 /// Returns a (from, to) UTC range.
 pub fn parse_date_range(input: &str) -> Result<(DateTime<Utc>, DateTime<Utc>)> {
-    let input = input.trim().to_lowercase();
+    let input_trimmed = input.trim();
+    let input_lower = input_trimmed.to_lowercase();
     let now = Local::now();
     let today_start = now
         .date_naive()
@@ -193,7 +195,7 @@ pub fn parse_date_range(input: &str) -> Result<(DateTime<Utc>, DateTime<Utc>)> {
         .unwrap()
         .with_timezone(&Utc);
 
-    match input.as_str() {
+    match input_lower.as_str() {
         "today" => Ok((today_start_utc, Utc::now())),
         "yesterday" => {
             let yesterday = today_start_utc - chrono::Duration::days(1);
@@ -201,14 +203,96 @@ pub fn parse_date_range(input: &str) -> Result<(DateTime<Utc>, DateTime<Utc>)> {
         }
         _ => {
             // Try "N days" pattern.
-            if let Some(rest) = input.strip_suffix("days").or(input.strip_suffix("day")) {
+            if let Some(rest) = input_lower
+                .strip_suffix("days")
+                .or(input_lower.strip_suffix("day"))
+            {
                 let n: i64 = rest.trim().parse()?;
                 let from = today_start_utc - chrono::Duration::days(n);
                 return Ok((from, Utc::now()));
             }
-            bail!("cannot parse date range: '{input}'")
+
+            // Try ISO 8601 date-only: "2026-06-01"
+            if let Ok(date) = chrono::NaiveDate::parse_from_str(input_trimmed, "%Y-%m-%d") {
+                let start = date.and_time(NaiveTime::from_hms_opt(0, 0, 0).unwrap());
+                let end = date.and_time(NaiveTime::from_hms_opt(23, 59, 59).unwrap());
+                let start_utc = Local
+                    .from_local_datetime(&start)
+                    .single()
+                    .unwrap()
+                    .with_timezone(&Utc);
+                let end_utc = Local
+                    .from_local_datetime(&end)
+                    .single()
+                    .unwrap()
+                    .with_timezone(&Utc);
+                return Ok((start_utc, end_utc));
+            }
+
+            // Try ISO 8601 with time: "2026-06-01T10:00"
+            if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(input_trimmed, "%Y-%m-%dT%H:%M") {
+                let utc = Local
+                    .from_local_datetime(&dt)
+                    .single()
+                    .unwrap()
+                    .with_timezone(&Utc);
+                return Ok((utc, Utc::now()));
+            }
+
+            // Try "YYYY-MM-DD HH:MM"
+            if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(input_trimmed, "%Y-%m-%d %H:%M") {
+                let utc = Local
+                    .from_local_datetime(&dt)
+                    .single()
+                    .unwrap()
+                    .with_timezone(&Utc);
+                return Ok((utc, Utc::now()));
+            }
+
+            bail!("cannot parse date range: '{input_trimmed}'")
         }
     }
+}
+
+/// Parse a single date/datetime for range boundaries.
+/// Returns the start of day for date-only inputs.
+pub fn parse_date_boundary(input: &str) -> Result<DateTime<Utc>> {
+    let input = input.trim();
+
+    // Try ISO 8601 date-only: "2026-06-01"
+    if let Ok(date) = chrono::NaiveDate::parse_from_str(input, "%Y-%m-%d") {
+        let start = date.and_time(NaiveTime::from_hms_opt(0, 0, 0).unwrap());
+        let utc = Local
+            .from_local_datetime(&start)
+            .single()
+            .unwrap()
+            .with_timezone(&Utc);
+        return Ok(utc);
+    }
+
+    // Try ISO 8601 with time: "2026-06-01T10:00"
+    if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(input, "%Y-%m-%dT%H:%M") {
+        let utc = Local
+            .from_local_datetime(&dt)
+            .single()
+            .unwrap()
+            .with_timezone(&Utc);
+        return Ok(utc);
+    }
+
+    // Try "YYYY-MM-DD HH:MM"
+    if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(input, "%Y-%m-%d %H:%M") {
+        let utc = Local
+            .from_local_datetime(&dt)
+            .single()
+            .unwrap()
+            .with_timezone(&Utc);
+        return Ok(utc);
+    }
+
+    // Try relative expressions
+    let (from, _) = parse_date_range(input)?;
+    Ok(from)
 }
 
 #[cfg(test)]
