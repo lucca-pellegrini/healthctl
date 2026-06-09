@@ -3,6 +3,51 @@
 use healthctl_lib::event::{ActivityKind, Event, EventType, MentalKind};
 use healthctl_lib::ipc::{ReportData, ReportPeriod, StatusSummary};
 use owo_colors::OwoColorize;
+use unicode_width::UnicodeWidthStr;
+
+/// Display width of a string, accounting for East Asian Width (emojis count as 2).
+/// Note: this operates on the *plain* (un-colored) text — never pass ANSI codes here.
+pub fn display_width(s: &str) -> usize {
+    UnicodeWidthStr::width(s)
+}
+
+/// Truncate a plain string to at most `max` display columns, appending `…` if cut.
+/// The ellipsis itself counts toward the width budget.
+pub fn truncate_to_width(s: &str, max: usize) -> String {
+    if display_width(s) <= max {
+        return s.to_string();
+    }
+    if max == 0 {
+        return String::new();
+    }
+    // Reserve one column for the ellipsis.
+    let budget = max.saturating_sub(1);
+    let mut out = String::new();
+    let mut w = 0;
+    for ch in s.chars() {
+        let cw = UnicodeWidthStr::width(ch.to_string().as_str());
+        if w + cw > budget {
+            break;
+        }
+        out.push(ch);
+        w += cw;
+    }
+    out.push('…');
+    out
+}
+
+/// Right-pad a *colored* cell to a target display width, given its plain text
+/// (used only to measure width, since ANSI codes have zero display width).
+pub fn pad_right(colored: &str, plain: &str, width: usize) -> String {
+    let pad = width.saturating_sub(display_width(plain));
+    format!("{}{}", colored, " ".repeat(pad))
+}
+
+/// Left-pad a *colored* cell to a target display width, given its plain text.
+pub fn pad_left(colored: &str, plain: &str, width: usize) -> String {
+    let pad = width.saturating_sub(display_width(plain));
+    format!("{}{}", " ".repeat(pad), colored)
+}
 
 /// Get emoji for event type.
 pub fn event_emoji(event_type: &EventType) -> &'static str {
@@ -364,55 +409,27 @@ pub fn print_events_table(events: &[Event]) {
         return;
     }
 
-    // Table constants
-    let id_w = 8;
-    let date_w = 14;
-    let type_w = 14;
-    let dur_w = 8;
-    let tags_w = 30;
+    // Column display widths.
+    let widths = [8usize, 14, 14, 8, 30]; // ID, Date, Type, Duration, Tags
 
     // Header
     println!();
-    println!(
-        " {}{}{}{}{}{}{}{}{}{}",
-        "┌".dimmed(),
-        "─".repeat(id_w + 2).dimmed(),
-        "┬".dimmed(),
-        "─".repeat(date_w + 2).dimmed(),
-        "┬".dimmed(),
-        "─".repeat(type_w + 2).dimmed(),
-        "┬".dimmed(),
-        "─".repeat(dur_w + 2).dimmed(),
-        "┬".dimmed(),
-        "─".repeat(tags_w + 2).dimmed(),
-    );
-    println!(
-        " {} {:<id_w$} {} {:<date_w$} {} {:<type_w$} {} {:>dur_w$} {} {:<tags_w$} {}",
-        "│".dimmed(),
-        "ID".bold(),
-        "│".dimmed(),
-        "Date".bold(),
-        "│".dimmed(),
-        "Type".bold(),
-        "│".dimmed(),
-        "Duration".bold(),
-        "│".dimmed(),
-        "Tags".bold(),
-        "│".dimmed(),
-    );
-    println!(
-        " {}{}{}{}{}{}{}{}{}{}",
-        "├".dimmed(),
-        "─".repeat(id_w + 2).dimmed(),
-        "┼".dimmed(),
-        "─".repeat(date_w + 2).dimmed(),
-        "┼".dimmed(),
-        "─".repeat(type_w + 2).dimmed(),
-        "┼".dimmed(),
-        "─".repeat(dur_w + 2).dimmed(),
-        "┼".dimmed(),
-        "─".repeat(tags_w + 2).dimmed(),
-    );
+    print_table_border(&widths, '┌', '┬', '┐');
+    let headers = ["ID", "Date", "Type", "Duration", "Tags"];
+    let header_cells: Vec<String> = headers
+        .iter()
+        .enumerate()
+        .map(|(i, h)| {
+            // Duration is right-aligned, the rest left-aligned.
+            if i == 3 {
+                pad_left(&h.bold().to_string(), h, widths[i])
+            } else {
+                pad_right(&h.bold().to_string(), h, widths[i])
+            }
+        })
+        .collect();
+    print_table_row(&header_cells);
+    print_table_border(&widths, '├', '┼', '┤');
 
     // Rows
     for event in events {
@@ -429,60 +446,60 @@ pub fn print_events_table(events: &[Event]) {
 
         let dur = event
             .duration_secs()
-            .map(|d| format_duration(d))
+            .map(format_duration)
             .unwrap_or_else(|| "—".into());
 
-        let tags = if event.tags.is_empty() {
-            "—".dimmed().to_string()
+        // Tags: truncate by display width so the cell never exceeds the column.
+        let (tags_colored, tags_plain) = if event.tags.is_empty() {
+            ("—".dimmed().to_string(), "—".to_string())
         } else {
-            let tag_str = event.tags.join(", ");
-            if tag_str.len() > tags_w {
-                format!("{}…", &tag_str[..tags_w - 1]).dimmed().to_string()
-            } else {
-                tag_str.dimmed().to_string()
-            }
+            let tag_str = truncate_to_width(&event.tags.join(", "), widths[4]);
+            (tag_str.dimmed().to_string(), tag_str)
         };
 
-        // Calculate padding for type column (accounting for ANSI codes)
-        let type_padding = type_w.saturating_sub(type_plain.chars().count());
-        let type_display = format!("{}{}", type_colored, " ".repeat(type_padding));
-
-        println!(
-            " {} {:<id_w$} {} {:<date_w$} {} {} {} {:>dur_w$} {} {:<tags_w$} {}",
-            "│".dimmed(),
-            id.bright_black(),
-            "│".dimmed(),
-            date,
-            "│".dimmed(),
-            type_display,
-            "│".dimmed(),
-            dur.bright_white(),
-            "│".dimmed(),
-            tags,
-            "│".dimmed(),
-        );
+        // Every column is padded by *display width* (emojis count as 2 columns),
+        // measuring against the plain (un-colored) text.
+        let cells = [
+            pad_right(&id.bright_black().to_string(), id, widths[0]),
+            pad_right(&date, &date, widths[1]),
+            pad_right(&type_colored, &type_plain, widths[2]),
+            pad_left(&dur.bright_white().to_string(), &dur, widths[3]),
+            pad_right(&tags_colored, &tags_plain, widths[4]),
+        ];
+        print_table_row(&cells);
     }
 
     // Footer
-    println!(
-        " {}{}{}{}{}{}{}{}{}{}",
-        "└".dimmed(),
-        "─".repeat(id_w + 2).dimmed(),
-        "┴".dimmed(),
-        "─".repeat(date_w + 2).dimmed(),
-        "┴".dimmed(),
-        "─".repeat(type_w + 2).dimmed(),
-        "┴".dimmed(),
-        "─".repeat(dur_w + 2).dimmed(),
-        "┴".dimmed(),
-        "─".repeat(tags_w + 2).dimmed(),
-    );
+    print_table_border(&widths, '└', '┴', '┘');
 
     println!(
         " {} {}\n",
         "📋".dimmed(),
         format!("{} event(s)", events.len()).dimmed()
     );
+}
+
+/// Print a horizontal table border given column widths and the corner/junction chars.
+fn print_table_border(widths: &[usize], left: char, mid: char, right: char) {
+    let mut line = String::new();
+    line.push(left);
+    for (i, w) in widths.iter().enumerate() {
+        line.push_str(&"─".repeat(w + 2));
+        if i + 1 < widths.len() {
+            line.push(mid);
+        }
+    }
+    line.push(right);
+    println!(" {}", line.dimmed());
+}
+
+/// Print a single table row from pre-padded cells.
+fn print_table_row(cells: &[String]) {
+    let mut out = format!(" {}", "│".dimmed());
+    for cell in cells {
+        out.push_str(&format!(" {} {}", cell, "│".dimmed()));
+    }
+    println!("{out}");
 }
 
 /// Print event summary for delete confirmation.
@@ -557,5 +574,63 @@ fn format_metric_value(key: &str, val: f64) -> String {
         } else {
             format!("{val}")
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_display_width_ascii() {
+        assert_eq!(display_width("hello"), 5);
+        assert_eq!(display_width(""), 0);
+    }
+
+    #[test]
+    fn test_display_width_emoji_double() {
+        // Emojis render as two columns in most terminals.
+        assert_eq!(display_width("🚶"), 2);
+        assert_eq!(display_width("💪"), 2);
+        // "💪 Strength" = 2 (emoji) + 1 (space) + 8 (Strength) = 11
+        assert_eq!(display_width("💪 Strength"), 11);
+    }
+
+    #[test]
+    fn test_truncate_to_width_no_cut() {
+        assert_eq!(truncate_to_width("daily", 30), "daily");
+    }
+
+    #[test]
+    fn test_truncate_to_width_cuts_with_ellipsis() {
+        let s = "glutes, gym, hamstrings, legs, quads";
+        let out = truncate_to_width(s, 30);
+        // Must never exceed the column width.
+        assert!(display_width(&out) <= 30);
+        assert!(out.ends_with('…'));
+    }
+
+    #[test]
+    fn test_truncate_to_width_multibyte_safe() {
+        // Should not panic on a multibyte boundary.
+        let s = "área, ção, naïve, café";
+        let out = truncate_to_width(s, 10);
+        assert!(display_width(&out) <= 10);
+    }
+
+    #[test]
+    fn test_pad_right_accounts_for_emoji() {
+        // "🚶 Walk" has display width 7 (2 + 1 + 4); padding to 14 adds 7 spaces.
+        let plain = "🚶 Walk";
+        let padded = pad_right(plain, plain, 14);
+        // The padded plain text should have display width exactly 14.
+        assert_eq!(display_width(&padded), 14);
+    }
+
+    #[test]
+    fn test_pad_left_accounts_for_width() {
+        let plain = "1h 04m";
+        let padded = pad_left(plain, plain, 8);
+        assert_eq!(display_width(&padded), 8);
     }
 }
