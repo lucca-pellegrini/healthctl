@@ -47,6 +47,8 @@ pub enum Command {
     Report(ReportCommand),
     /// Manage the daemon.
     Daemon(DaemonCommand),
+    /// Launch the Tauri dashboard UI in the background.
+    Dashboard,
 }
 
 #[derive(Parser)]
