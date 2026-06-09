@@ -92,7 +92,7 @@ healthctl/
 │   └── healthctl-dashboard/# Dashboard Tauri
 ├── completions/            # Completação de shell (zsh)
 ├── docs/                   # Documentação do projeto
-│   ├── TP1.md             # Requisitos e casos de uso
+│   ├── requisitos.md      # Requisitos e casos de uso
 │   ├── arquitetura.md     # Arquitetura C4
 │   └── testes.md          # Plano de testes
 └── Videos/                 # Vídeos de demonstração
@@ -102,7 +102,7 @@ healthctl/
 
 A documentação completa do projeto está disponível na pasta [`docs/`](./docs/):
 
-- [TP1 - Definição do Problema e Requisitos](./docs/TP1.md)
+- [Definição do Problema e Requisitos](./docs/requisitos.md)
 - [Arquitetura do Sistema (C4 Model)](./docs/arquitetura.md)
 - [Plano de Testes](./docs/testes.md)
 
