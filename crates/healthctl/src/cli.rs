@@ -130,17 +130,35 @@ pub struct ListCommand {
     /// Event type filter (activity, sleep, nutrition, etc).
     pub event_type: Option<String>,
 
+    /// Filter by specific day (e.g., "today", "yesterday", "2026-06-01").
     #[arg(long)]
     pub day: Option<String>,
+
+    /// Show events from last 7 days.
     #[arg(long)]
     pub week: bool,
+
+    /// Start date/time (e.g., "2026-06-01", "2001-01-01", "7 days").
     #[arg(long)]
     pub from: Option<String>,
+
+    /// End date/time (defaults to now).
     #[arg(long)]
     pub to: Option<String>,
+
+    /// Maximum number of events to return.
     #[arg(long)]
     pub limit: Option<u32>,
 
+    /// Show all events (no time filter).
+    #[arg(long, short = 'a')]
+    pub all: bool,
+
+    /// Reverse order (most recent first instead of chronological).
+    #[arg(long, short = 'r')]
+    pub reverse: bool,
+
+    /// Filter by tag (can be repeated).
     #[arg(long = "tag", num_args = 1)]
     pub tags: Vec<String>,
 }
@@ -359,7 +377,11 @@ impl CloneCommand {
 
 impl ListCommand {
     pub fn to_filter(&self) -> Result<ListFilter> {
-        let (from, to) = if self.week {
+        let (from, to) = if self.all {
+            // --all: no time filter
+            (None, None)
+        } else if self.week {
+            // --week: last 7 days
             let now = chrono::Utc::now();
             let week_ago = now - chrono::Duration::days(7);
             (Some(week_ago), Some(now))
@@ -367,16 +389,20 @@ impl ListCommand {
             let (f, t) = healthctl_lib::parse::parse_date_range(day)?;
             (Some(f), Some(t))
         } else if let Some(ref from_str) = self.from {
-            let (f, _) = healthctl_lib::parse::parse_date_range(from_str)?;
+            // Use parse_date_boundary for --from to handle ISO dates
+            let f = healthctl_lib::parse::parse_date_boundary(from_str)?;
             let to = if let Some(ref to_str) = self.to {
-                let (_, t) = healthctl_lib::parse::parse_date_range(to_str)?;
+                let t = healthctl_lib::parse::parse_date_boundary(to_str)?;
                 Some(t)
             } else {
                 Some(chrono::Utc::now())
             };
             (Some(f), to)
         } else {
-            (None, None)
+            // Default: last 7 days (sensible default)
+            let now = chrono::Utc::now();
+            let week_ago = now - chrono::Duration::days(7);
+            (Some(week_ago), Some(now))
         };
 
         Ok(ListFilter {
@@ -385,6 +411,7 @@ impl ListCommand {
             to,
             tags: self.tags.clone(),
             limit: self.limit,
+            reverse: self.reverse,
         })
     }
 }

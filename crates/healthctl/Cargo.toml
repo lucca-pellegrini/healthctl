@@ -19,3 +19,5 @@ uuid.workspace = true
 directories.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+owo-colors.workspace = true
+unicode-width.workspace = true
