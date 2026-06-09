@@ -86,25 +86,92 @@
             gap: 16px;
         }
 
-        .theme-toggle {
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border-primary);
-            color: var(--text-secondary);
-            width: 36px;
-            height: 36px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 16px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.2s;
+        .theme-switch {
+            position: relative;
+            width: 52px;
+            height: 28px;
+
+            opacity: 0;
+            transform: translateX(16px);
+
+            transition:
+                opacity 0.2s ease,
+                transform 0.25s ease;
         }
 
-        .theme-toggle:hover {
-            background: var(--bg-hover);
-            color: var(--text-primary);
+        .header:hover .theme-switch,
+        .theme-switch:hover {
+            opacity: 1;
+            transform: translateX(0);
+        }
+
+        .theme-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .theme-slider {
+            position: absolute;
+            inset: 0;
+            cursor: pointer;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-primary);
+            border-radius: 999px;
+            transition: all 0.25s;
+        }
+
+        .theme-slider::before {
+            content: "";
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            left: 3px;
+            top: 3px;
+            border-radius: 50%;
+            background: var(--accent-primary);
+            transition: transform 0.25s;
+        }
+
+        .theme-switch input:checked + .theme-slider::before {
+            transform: translateX(24px);
+        }
+
+        .theme-switch:hover .theme-slider {
             border-color: var(--accent-primary);
+        }
+
+        .theme-control {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+
+            opacity: 0;
+            transform: translateX(16px);
+
+            transition:
+                opacity 0.2s ease,
+                transform 0.25s ease;
+        }
+
+        .header:hover .theme-control,
+        .theme-control:hover {
+            opacity: 1;
+            transform: translateX(0);
+        }
+
+        .theme-label {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            user-select: none;
+            white-space: nowrap;
+
+            opacity: 0.8;
+            transition: opacity 0.2s ease;
+        }
+
+        .theme-control:hover .theme-label {
+            opacity: 1;
         }
 
         .status {
@@ -1245,6 +1312,13 @@
     <div class="header">
         <h1>⚡ Fitness Dashboard</h1>
         <div class="header-right">
+            <label class="theme-control">
+                <span class="theme-switch">
+                    <input type="checkbox" id="themeToggle">
+                    <span class="theme-slider"></span>
+                </span>
+                <span class="theme-label">❓</span>
+            </label>
             <div class="streak-widget" id="streakWidget">
                 <span class="streak-icon">🔥</span>
                 <div>
@@ -1252,9 +1326,6 @@
                     <div class="streak-label">day streak</div>
                 </div>
             </div>
-            <button class="theme-toggle" id="themeToggle" title="Toggle theme">
-                <span id="themeIcon">☀️</span>
-            </button>
             <div class="status">
                 <div class="status-dot" id="statusDot"></div>
                 <span id="statusText">Connecting...</span>
@@ -1429,18 +1500,26 @@
 
         function applyTheme(theme) {
             currentTheme = theme;
+
+            const toggle = document.getElementById('themeToggle');
+            const label = document.querySelector('.theme-label');
+
+            // Apply the CSS theme
             if (theme === 'light') {
                 document.documentElement.setAttribute('data-theme', 'light');
-                document.getElementById('themeIcon').textContent = '🌙';
+                toggle.checked = true;
+                label.textContent = '🌙';
             } else {
                 document.documentElement.removeAttribute('data-theme');
-                document.getElementById('themeIcon').textContent = '☀️';
+                toggle.checked = false;
+                label.textContent = '☀️';
             }
         }
 
         async function toggleTheme() {
             const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
             applyTheme(newTheme);
+
             try {
                 await invoke('set_theme', { theme: newTheme });
             } catch (err) {
@@ -2344,7 +2423,7 @@
         window.addEventListener('resize', updateTabIndicator);
 
         // Theme toggle handler
-        document.getElementById('themeToggle').addEventListener('click', toggleTheme);
+        document.getElementById('themeToggle').addEventListener('change', toggleTheme);
 
         // Initialize
         loadTheme(); // Load saved theme first
