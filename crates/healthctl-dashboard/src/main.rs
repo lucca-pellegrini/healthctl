@@ -355,6 +355,7 @@ async fn get_dashboard_data(
         )),
         tags: vec![],
         limit: Some(2000),
+        reverse: false,
     };
 
     let response = send_request(&Request::List(filter))?;

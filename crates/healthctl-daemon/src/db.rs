@@ -304,7 +304,11 @@ impl Database {
             binds.push(ts);
         }
 
-        sql.push_str(" ORDER BY COALESCE(start_time, end_time, created_at) DESC");
+        // Default is newest first (DESC), reverse means chronological (ASC)
+        let order = if filter.reverse { "ASC" } else { "DESC" };
+        sql.push_str(&format!(
+            " ORDER BY COALESCE(start_time, end_time, created_at) {order}"
+        ));
 
         if let Some(limit) = filter.limit {
             sql.push_str(&format!(" LIMIT {limit}"));
