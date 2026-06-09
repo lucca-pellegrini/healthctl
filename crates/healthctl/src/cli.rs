@@ -43,14 +43,35 @@ pub enum Command {
     },
     /// Show today's status summary.
     Status,
-    /// Generate a report.
-    Report {
-        /// Period: day, week, month.
-        #[arg(default_value = "week")]
-        period: String,
-    },
+    /// Generate a report (overview by default; pass flags for detailed cards).
+    Report(ReportCommand),
     /// Manage the daemon.
     Daemon(DaemonCommand),
+    /// Launch the Tauri dashboard UI in the background.
+    Dashboard,
+    /// Internal: emit machine-readable candidates for shell completion.
+    ///
+    /// Hidden from `--help`; invoked by the generated `_healthctl` zsh
+    /// completion function. Not part of the public CLI surface.
+    #[command(name = "__complete", hide = true)]
+    Complete(CompleteCommand),
+}
+
+#[derive(Parser)]
+pub struct CompleteCommand {
+    #[command(subcommand)]
+    pub kind: CompleteKind,
+}
+
+#[derive(Subcommand)]
+pub enum CompleteKind {
+    /// Emit event candidates as `short_id\tdescription` lines, newest first.
+    Events {
+        /// Optional short-id prefix already typed by the user.
+        prefix: Option<String>,
+    },
+    /// Emit recently-used tags, one per line, most-recent first.
+    Tags,
 }
 
 #[derive(Parser)]
@@ -130,29 +151,121 @@ pub struct ListCommand {
     /// Event type filter (activity, sleep, nutrition, etc).
     pub event_type: Option<String>,
 
+    /// Filter by specific day (e.g., "today", "yesterday", "2026-06-01").
     #[arg(long)]
     pub day: Option<String>,
+
+    /// Show events from last 7 days.
     #[arg(long)]
     pub week: bool,
+
+    /// Start date/time (e.g., "2026-06-01", "2001-01-01", "7 days").
     #[arg(long)]
     pub from: Option<String>,
+
+    /// End date/time (defaults to now).
     #[arg(long)]
     pub to: Option<String>,
+
+    /// Maximum number of events to return.
     #[arg(long)]
     pub limit: Option<u32>,
 
+    /// Show all events (no time filter).
+    #[arg(long, short = 'a')]
+    pub all: bool,
+
+    /// Reverse order (most recent first instead of chronological).
+    #[arg(long, short = 'r')]
+    pub reverse: bool,
+
+    /// Filter by tag (can be repeated).
     #[arg(long = "tag", num_args = 1)]
     pub tags: Vec<String>,
 }
 
 #[derive(Parser)]
+pub struct ReportCommand {
+    /// Period: day, week, month, year.
+    #[arg(default_value = "week")]
+    pub period: String,
+
+    /// Show detailed steps breakdown.
+    #[arg(long, short = 'S')]
+    pub steps: bool,
+    /// Show detailed calories breakdown.
+    #[arg(long, short = 'c')]
+    pub calories: bool,
+    /// Show detailed distance breakdown.
+    #[arg(long, short = 'd')]
+    pub distance: bool,
+    /// Show detailed active-time breakdown.
+    #[arg(long, short = 'A')]
+    pub active: bool,
+    /// Show detailed sleep breakdown.
+    #[arg(long, short = 's')]
+    pub sleep: bool,
+    /// Show detailed workouts breakdown.
+    #[arg(long, short = 'w')]
+    pub workouts: bool,
+    /// Show every card in full detail.
+    #[arg(long, short = 'a')]
+    pub all: bool,
+}
+
+impl ReportCommand {
+    /// Which detailed cards were requested (in display order).
+    pub fn selected_cards(&self) -> Vec<crate::format::ReportCard> {
+        use crate::format::ReportCard;
+        if self.all {
+            return vec![
+                ReportCard::Steps,
+                ReportCard::Calories,
+                ReportCard::Distance,
+                ReportCard::Active,
+                ReportCard::Sleep,
+                ReportCard::Workouts,
+            ];
+        }
+        let mut cards = Vec::new();
+        if self.steps {
+            cards.push(ReportCard::Steps);
+        }
+        if self.calories {
+            cards.push(ReportCard::Calories);
+        }
+        if self.distance {
+            cards.push(ReportCard::Distance);
+        }
+        if self.active {
+            cards.push(ReportCard::Active);
+        }
+        if self.sleep {
+            cards.push(ReportCard::Sleep);
+        }
+        if self.workouts {
+            cards.push(ReportCard::Workouts);
+        }
+        cards
+    }
+}
+
+#[derive(Parser)]
 pub struct DaemonCommand {
-    #[arg(long)]
-    pub stop: bool,
-    #[arg(long)]
-    pub restart: bool,
-    #[arg(long)]
-    pub status: bool,
+    #[command(subcommand)]
+    pub action: Option<DaemonAction>,
+}
+
+#[derive(Subcommand)]
+pub enum DaemonAction {
+    /// Start the daemon if it is not already running.
+    Start,
+    /// Stop the running daemon.
+    Stop,
+    /// Restart the daemon.
+    Restart,
+    /// Show whether the daemon is running.
+    Status,
 }
 
 pub fn parse() -> Args {
@@ -359,7 +472,11 @@ impl CloneCommand {
 
 impl ListCommand {
     pub fn to_filter(&self) -> Result<ListFilter> {
-        let (from, to) = if self.week {
+        let (from, to) = if self.all {
+            // --all: no time filter
+            (None, None)
+        } else if self.week {
+            // --week: last 7 days
             let now = chrono::Utc::now();
             let week_ago = now - chrono::Duration::days(7);
             (Some(week_ago), Some(now))
@@ -367,16 +484,20 @@ impl ListCommand {
             let (f, t) = healthctl_lib::parse::parse_date_range(day)?;
             (Some(f), Some(t))
         } else if let Some(ref from_str) = self.from {
-            let (f, _) = healthctl_lib::parse::parse_date_range(from_str)?;
+            // Use parse_date_boundary for --from to handle ISO dates
+            let f = healthctl_lib::parse::parse_date_boundary(from_str)?;
             let to = if let Some(ref to_str) = self.to {
-                let (_, t) = healthctl_lib::parse::parse_date_range(to_str)?;
+                let t = healthctl_lib::parse::parse_date_boundary(to_str)?;
                 Some(t)
             } else {
                 Some(chrono::Utc::now())
             };
             (Some(f), to)
         } else {
-            (None, None)
+            // Default: last 7 days (sensible default)
+            let now = chrono::Utc::now();
+            let week_ago = now - chrono::Duration::days(7);
+            (Some(week_ago), Some(now))
         };
 
         Ok(ListFilter {
@@ -385,6 +506,7 @@ impl ListCommand {
             to,
             tags: self.tags.clone(),
             limit: self.limit,
+            reverse: self.reverse,
         })
     }
 }

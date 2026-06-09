@@ -1,8 +1,8 @@
-# TP4/TP5 - Plano de Testes
+# Plano de Testes
 
 ## 1. Estratégia de Testes
 
-Este documento descreve o plano de testes para o sistema healthctl, incluindo casos de teste para cada caso de uso identificado no TP1.
+Este documento descreve o plano de testes para o sistema healthctl, incluindo casos de teste para cada caso de uso identificado no documento de requisitos.
 
 ### 1.1 Tipos de Testes
 
@@ -106,7 +106,7 @@ Event c3d4e5f6 added: hydration
 
 | TC ID | Descrição | Entrada | Resultado Esperado | Status |
 |-------|-----------|---------|-------------------|--------|
-| TC08.1 | Listar todos os eventos | `healthctl list` | Lista de eventos recentes (limite 100) | Passou |
+| TC08.1 | Listar eventos padrão | `healthctl list` | Eventos dos últimos 7 dias (ordem cronológica) | Passou |
 | TC08.2 | Listar eventos da semana | `healthctl list --week` | Eventos dos últimos 7 dias | Passou |
 | TC08.3 | Listar por tipo | `healthctl list activity` | Apenas eventos de atividade | Passou |
 | TC08.4 | Listar por dia específico | `healthctl list --day 2024-01-15` | Eventos do dia especificado | Passou |
@@ -162,6 +162,26 @@ Weekly Report:
   Avg daily active time: 60 min
 ```
 
+### UC11 - Visualizar Streak
+
+| TC ID | Descrição | Entrada | Resultado Esperado | Status |
+|-------|-----------|---------|-------------------|--------|
+| TC11.1 | Ver streak ativo | `healthctl status` | Mostra dias consecutivos de atividade | Passou |
+| TC11.2 | Ver streak quebrado | `healthctl status` (após dia sem atividade) | Streak zerado ou mensagem apropriada | Passou |
+| TC11.3 | Ver streak longo | `healthctl status` (streak > 7 dias) | Exibe com emoji de fogo 🔥 | Passou |
+
+**Execução TC11.1:**
+```bash
+$ healthctl status
+Today's Status:
+  Events: 5
+  Calories burned: 450 kcal
+  Active time: 45 min
+  
+This week: 23 events
+Streak: 7 days 🔥
+```
+
 ### UC12 - Editar Evento
 
 | TC ID | Descrição | Entrada | Resultado Esperado | Status |
@@ -211,15 +231,15 @@ Deleted event a1b2c3d4
 
 | TC ID | Descrição | Entrada | Resultado Esperado | Status |
 |-------|-----------|---------|-------------------|--------|
-| TC16.1 | Ver status do daemon | `healthctl daemon --status` | Status: running/stopped | Passou |
-| TC16.2 | Parar daemon | `healthctl daemon --stop` | Daemon encerrado | Passou |
-| TC16.3 | Reiniciar daemon | `healthctl daemon --restart` | Daemon reiniciado | Passou |
+| TC16.1 | Ver status do daemon | `healthctl daemon status` | Status: running/stopped | Passou |
+| TC16.2 | Parar daemon | `healthctl daemon stop` | Daemon encerrado | Passou |
+| TC16.3 | Reiniciar daemon | `healthctl daemon restart` | Daemon reiniciado | Passou |
 
 ### UC17 - Visualizar Dashboard
 
 | TC ID | Descrição | Entrada | Resultado Esperado | Status |
 |-------|-----------|---------|-------------------|--------|
-| TC17.1 | Abrir dashboard | Executar healthctl-dashboard | Janela abre com dados da semana | Passou |
+| TC17.1 | Abrir dashboard | `healthctl dashboard` | Janela abre com dados da semana | Passou |
 | TC17.2 | Dashboard sem daemon | Abrir com daemon parado | Tenta iniciar daemon automaticamente | Passou |
 | TC17.3 | Visualizar cards de métricas | Click em card | Detalhes expandidos em modal | Passou |
 
@@ -288,11 +308,11 @@ Deleted event a1b2c3d4
 | Categoria | Total | Passou | Falhou | Taxa |
 |-----------|-------|--------|--------|------|
 | UC01-UC07 (Registro) | 21 | 21 | 0 | 100% |
-| UC08-UC11 (Consultas) | 12 | 12 | 0 | 100% |
+| UC08-UC11 (Consultas) | 15 | 15 | 0 | 100% |
 | UC12-UC16 (Manutenção) | 13 | 13 | 0 | 100% |
 | UC17-UC20 (Dashboard) | 12 | 12 | 0 | 100% |
 | Integração | 3 | 3 | 0 | 100% |
-| **Total** | **61** | **61** | **0** | **100%** |
+| **Total** | **64** | **64** | **0** | **100%** |
 
 ## 5. Observações
 

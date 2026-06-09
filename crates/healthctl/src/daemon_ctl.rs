@@ -4,24 +4,26 @@ use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::UnixStream;
 use std::process::Command;
 
-use crate::cli::DaemonCommand;
+use crate::cli::{DaemonAction, DaemonCommand};
 
 pub fn handle(cmd: DaemonCommand) -> Result<()> {
-    if cmd.stop {
-        return stop_daemon();
+    match cmd.action {
+        Some(DaemonAction::Stop) => stop_daemon(),
+        Some(DaemonAction::Restart) => {
+            stop_daemon().ok(); // Ignore error if not running.
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            spawn_daemon()?;
+            println!("daemon restarted");
+            Ok(())
+        }
+        Some(DaemonAction::Status) => check_status(),
+        // `start` and the bare `daemon` both start the daemon if not running.
+        Some(DaemonAction::Start) | None => start_daemon(),
     }
-    if cmd.restart {
-        stop_daemon().ok(); // Ignore error if not running.
-        std::thread::sleep(std::time::Duration::from_millis(300));
-        spawn_daemon()?;
-        println!("daemon restarted");
-        return Ok(());
-    }
-    if cmd.status {
-        return check_status();
-    }
+}
 
-    // Default: start the daemon if not running.
+/// Start the daemon if it is not already running.
+fn start_daemon() -> Result<()> {
     let socket_path = ipc::socket_path();
     if UnixStream::connect(&socket_path).is_ok() {
         println!("daemon is already running");
@@ -29,7 +31,6 @@ pub fn handle(cmd: DaemonCommand) -> Result<()> {
         spawn_daemon()?;
         println!("daemon started");
     }
-
     Ok(())
 }
 

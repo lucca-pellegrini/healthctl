@@ -53,6 +53,34 @@ healthctl list --week
 healthctl report week
 ```
 
+## Completação no Shell (zsh)
+
+O `healthctl` inclui uma função de completação para **zsh** em
+[`completions/_healthctl`](./completions/_healthctl). Além de completar
+subcomandos e flags, ela consulta o daemon em tempo real para sugerir:
+
+- **IDs de eventos** (em `show`, `edit`, `remove`/`rm`, `clone`), em ordem
+  cronológica (mais recentes primeiro) e anotados com o tipo, a data e as tags
+  do evento — assim como `git show <TAB>` anota commits.
+- **Tags** (em `add --tag`, `list --tag`, `clone --tag`), ordenadas da mais
+  recente para a mais antiga (limitadas às ~30 mais recentes).
+
+Para instalar:
+
+```bash
+# Copie a função para um diretório no seu $fpath
+mkdir -p ~/.zfunc
+cp completions/_healthctl ~/.zfunc/
+
+# Em ~/.zshrc, *antes* de `compinit`:
+fpath=(~/.zfunc $fpath)
+autoload -Uz compinit && compinit
+```
+
+> As sugestões dinâmicas (IDs e tags) aparecem apenas quando o daemon já está
+> em execução; caso contrário, a completação simplesmente não oferece esses
+> candidatos (sem erros e sem iniciar o daemon).
+
 ## Estrutura do Projeto
 
 ```
@@ -62,8 +90,9 @@ healthctl/
 │   ├── healthctl-daemon/   # Daemon com SQLite
 │   ├── healthctl-lib/      # Biblioteca compartilhada
 │   └── healthctl-dashboard/# Dashboard Tauri
+├── completions/            # Completação de shell (zsh)
 ├── docs/                   # Documentação do projeto
-│   ├── TP1.md             # Requisitos e casos de uso
+│   ├── requisitos.md      # Requisitos e casos de uso
 │   ├── arquitetura.md     # Arquitetura C4
 │   └── testes.md          # Plano de testes
 └── Videos/                 # Vídeos de demonstração
@@ -73,7 +102,7 @@ healthctl/
 
 A documentação completa do projeto está disponível na pasta [`docs/`](./docs/):
 
-- [TP1 - Definição do Problema e Requisitos](./docs/TP1.md)
+- [Definição do Problema e Requisitos](./docs/requisitos.md)
 - [Arquitetura do Sistema (C4 Model)](./docs/arquitetura.md)
 - [Plano de Testes](./docs/testes.md)
 

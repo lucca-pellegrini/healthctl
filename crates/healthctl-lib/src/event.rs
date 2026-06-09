@@ -128,4 +128,67 @@ impl Event {
         self.tags.sort();
         self.tags.dedup();
     }
+
+    /// The event's anchor time for ordering: prefer start, then end, then
+    /// creation. Used by listings, reports and shell completion.
+    pub fn anchor_time(&self) -> DateTime<Utc> {
+        self.start_time.or(self.end_time).unwrap_or(self.created_at)
+    }
+}
+
+impl EventType {
+    /// An emoji glyph for this event type. Mirrors the CLI's pretty-printer but
+    /// lives in the shared library so non-CLI consumers (e.g. the daemon's
+    /// shell-completion endpoint) can annotate events without depending on the
+    /// CLI crate.
+    pub fn emoji(&self) -> &'static str {
+        match self {
+            EventType::Activity(kind) => match kind {
+                ActivityKind::Run => "🏃",
+                ActivityKind::Walk => "🚶",
+                ActivityKind::Cycle => "🚴",
+                ActivityKind::Swim => "🏊",
+                ActivityKind::Hike => "🥾",
+                ActivityKind::Other(_) => "🏋️",
+            },
+            EventType::Strength => "💪",
+            EventType::Sleep => "😴",
+            EventType::Nutrition => "🍽️",
+            EventType::Hydration => "💧",
+            EventType::Substance => "💊",
+            EventType::Mental(kind) => match kind {
+                MentalKind::Meditation => "🧘",
+                MentalKind::Relaxation => "🌿",
+                MentalKind::Prayer => "🙏",
+                MentalKind::Journaling => "📝",
+                MentalKind::Other(_) => "🧠",
+            },
+        }
+    }
+
+    /// A short plain-text label for this event type, e.g. "Run" or "Sleep".
+    pub fn label(&self) -> String {
+        match self {
+            EventType::Activity(kind) => match kind {
+                ActivityKind::Run => "Run".into(),
+                ActivityKind::Walk => "Walk".into(),
+                ActivityKind::Cycle => "Cycle".into(),
+                ActivityKind::Swim => "Swim".into(),
+                ActivityKind::Hike => "Hike".into(),
+                ActivityKind::Other(s) => s.clone(),
+            },
+            EventType::Strength => "Strength".into(),
+            EventType::Sleep => "Sleep".into(),
+            EventType::Nutrition => "Nutrition".into(),
+            EventType::Hydration => "Hydration".into(),
+            EventType::Substance => "Substance".into(),
+            EventType::Mental(kind) => match kind {
+                MentalKind::Meditation => "Meditation".into(),
+                MentalKind::Relaxation => "Relaxation".into(),
+                MentalKind::Prayer => "Prayer".into(),
+                MentalKind::Journaling => "Journaling".into(),
+                MentalKind::Other(s) => s.clone(),
+            },
+        }
+    }
 }

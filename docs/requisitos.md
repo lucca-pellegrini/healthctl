@@ -1,4 +1,4 @@
-# TP1 - Definição do Problema e Planejamento Inicial
+# Definição do Problema e Requisitos
 
 ## 1. Objetivo de Desenvolvimento Sustentável
 
@@ -181,6 +181,52 @@ graph TB
 | **Fluxo Alternativo** | Se horários inválidos, sistema exibe erro |
 | **Pós-condição** | Evento de sono registrado |
 
+### UC03 - Registrar Evento de Nutrição
+
+| Campo | Descrição |
+|-------|-----------|
+| **Ator** | Usuário |
+| **Pré-condição** | Daemon em execução |
+| **Fluxo Principal** | 1. Usuário executa `healthctl add nutrition` com parâmetros opcionais (--protein, --carbs, --fat, --calories) <br> 2. Sistema valida os macronutrientes <br> 3. Sistema persiste o evento <br> 4. Sistema confirma o registro |
+| **Pós-condição** | Evento de nutrição registrado |
+
+### UC04 - Registrar Evento de Hidratação
+
+| Campo | Descrição |
+|-------|-----------|
+| **Ator** | Usuário |
+| **Pré-condição** | Daemon em execução |
+| **Fluxo Principal** | 1. Usuário executa `healthctl add hydration <volume>` <br> 2. Sistema converte volume para ml <br> 3. Sistema persiste o evento <br> 4. Sistema confirma o registro |
+| **Pós-condição** | Evento de hidratação registrado |
+
+### UC05 - Registrar Evento de Substância
+
+| Campo | Descrição |
+|-------|-----------|
+| **Ator** | Usuário |
+| **Pré-condição** | Daemon em execução |
+| **Fluxo Principal** | 1. Usuário executa `healthctl add substance <nome> <dose>` <br> 2. Sistema valida a dose (em mg, g, etc.) <br> 3. Sistema persiste o evento com substância como tag <br> 4. Sistema confirma o registro |
+| **Pós-condição** | Evento de substância registrado |
+
+### UC06 - Registrar Evento de Saúde Mental
+
+| Campo | Descrição |
+|-------|-----------|
+| **Ator** | Usuário |
+| **Pré-condição** | Daemon em execução |
+| **Fluxo Principal** | 1. Usuário executa `healthctl add mental <tipo>` com duração opcional <br> 2. Sistema valida o tipo (meditation, relaxation, journaling, etc.) <br> 3. Sistema persiste o evento <br> 4. Sistema confirma o registro |
+| **Fluxo Alternativo** | Se tipo não fornecido, sistema exibe erro |
+| **Pós-condição** | Evento de saúde mental registrado |
+
+### UC07 - Registrar Treino de Força
+
+| Campo | Descrição |
+|-------|-----------|
+| **Ator** | Usuário |
+| **Pré-condição** | Daemon em execução |
+| **Fluxo Principal** | 1. Usuário executa `healthctl add strength` com parâmetros opcionais (--duration, --calories, --tag) <br> 2. Sistema valida os dados <br> 3. Sistema persiste o evento <br> 4. Sistema confirma o registro |
+| **Pós-condição** | Evento de treino de força registrado |
+
 ### UC08 - Listar Eventos
 
 | Campo | Descrição |
@@ -190,6 +236,15 @@ graph TB
 | **Fluxo Principal** | 1. Usuário executa `healthctl list` com filtros opcionais (--day, --week, --from, --to, --tag) <br> 2. Sistema consulta eventos <br> 3. Sistema exibe lista formatada |
 | **Pós-condição** | Lista de eventos exibida |
 
+### UC09 - Visualizar Status Diário
+
+| Campo | Descrição |
+|-------|-----------|
+| **Ator** | Usuário |
+| **Pré-condição** | Daemon em execução |
+| **Fluxo Principal** | 1. Usuário executa `healthctl status` <br> 2. Sistema agrega eventos do dia <br> 3. Sistema calcula streak de atividades <br> 4. Sistema exibe resumo do dia e streak |
+| **Pós-condição** | Status do dia exibido com streak |
+
 ### UC10 - Gerar Relatório
 
 | Campo | Descrição |
@@ -198,6 +253,34 @@ graph TB
 | **Pré-condição** | Daemon em execução; eventos existentes |
 | **Fluxo Principal** | 1. Usuário executa `healthctl report <período>` <br> 2. Sistema agrega dados do período <br> 3. Sistema calcula médias e totais <br> 4. Sistema exibe relatório formatado |
 | **Pós-condição** | Relatório exibido |
+
+### UC11 - Visualizar Streak
+
+| Campo | Descrição |
+|-------|-----------|
+| **Ator** | Usuário |
+| **Pré-condição** | Daemon em execução; eventos de atividade registrados |
+| **Fluxo Principal** | 1. Usuário executa `healthctl status` <br> 2. Sistema calcula dias consecutivos com atividade <br> 3. Sistema exibe streak atual <br> 4. Se streak > 7 dias, exibe com emoji de fogo |
+| **Pós-condição** | Streak de atividades exibido |
+
+### UC12 - Editar Evento
+
+| Campo | Descrição |
+|-------|-----------|
+| **Ator** | Usuário |
+| **Pré-condição** | Daemon em execução; evento existente |
+| **Fluxo Principal** | 1. Usuário executa `healthctl edit <id>` <br> 2. Sistema abre evento em $EDITOR como TOML <br> 3. Usuário edita e salva <br> 4. Sistema valida alterações <br> 5. Sistema atualiza evento |
+| **Fluxo Alternativo** | Se edição inválida, sistema exibe erro |
+| **Pós-condição** | Evento atualizado |
+
+### UC13 - Clonar Evento
+
+| Campo | Descrição |
+|-------|-----------|
+| **Ator** | Usuário |
+| **Pré-condição** | Daemon em execução; evento existente |
+| **Fluxo Principal** | 1. Usuário executa `healthctl clone <id>` com modificações opcionais <br> 2. Sistema copia evento original <br> 3. Sistema aplica modificações <br> 4. Sistema cria novo evento com novo ID <br> 5. Sistema confirma criação |
+| **Pós-condição** | Novo evento criado baseado no original |
 
 ### UC14 - Remover Evento
 
@@ -209,14 +292,61 @@ graph TB
 | **Fluxo Alternativo** | Se flag -y, pula confirmação. Se ID ambíguo, exibe erro. |
 | **Pós-condição** | Evento removido do banco de dados |
 
+### UC15 - Mostrar Detalhes do Evento
+
+| Campo | Descrição |
+|-------|-----------|
+| **Ator** | Usuário |
+| **Pré-condição** | Daemon em execução; evento existente |
+| **Fluxo Principal** | 1. Usuário executa `healthctl show <id>` <br> 2. Sistema busca evento pelo ID ou prefixo <br> 3. Sistema exibe detalhes completos do evento |
+| **Fluxo Alternativo** | Se evento não encontrado, sistema exibe erro |
+| **Pós-condição** | Detalhes do evento exibidos |
+
+### UC16 - Gerenciar Daemon
+
+| Campo | Descrição |
+|-------|-----------|
+| **Ator** | Usuário |
+| **Pré-condição** | Sistema instalado |
+| **Fluxo Principal** | 1. Usuário executa `healthctl daemon <ação>` <br> 2. Sistema executa ação (start, stop, restart, status) <br> 3. Sistema confirma ação executada |
+| **Pós-condição** | Estado do daemon alterado conforme solicitado |
+
 ### UC17 - Visualizar Dashboard
 
 | Campo | Descrição |
 |-------|-----------|
 | **Ator** | Usuário |
 | **Pré-condição** | Daemon em execução |
-| **Fluxo Principal** | 1. Usuário abre o dashboard <br> 2. Sistema carrega dados da semana atual <br> 3. Sistema exibe resumo semanal, gráficos e lista de atividades <br> 4. Usuário interage com cards para ver detalhes |
+| **Fluxo Principal** | 1. Usuário executa `healthctl dashboard` <br> 2. Sistema carrega dados da semana atual <br> 3. Sistema exibe resumo semanal, gráficos e lista de atividades <br> 4. Usuário interage com cards para ver detalhes |
 | **Pós-condição** | Dashboard exibido com dados atualizados |
+
+### UC18 - Navegar por Semanas
+
+| Campo | Descrição |
+|-------|-----------|
+| **Ator** | Usuário |
+| **Pré-condição** | Dashboard aberto |
+| **Fluxo Principal** | 1. Usuário seleciona semana no calendário <br> 2. Sistema carrega dados da semana selecionada <br> 3. Sistema atualiza gráficos e métricas <br> 4. Sistema exibe dados da nova semana |
+| **Pós-condição** | Dashboard atualizado com dados da semana selecionada |
+
+### UC19 - Alternar Tema
+
+| Campo | Descrição |
+|-------|-----------|
+| **Ator** | Usuário |
+| **Pré-condição** | Dashboard aberto |
+| **Fluxo Principal** | 1. Usuário clica no toggle de tema <br> 2. Sistema alterna entre tema claro e escuro <br> 3. Sistema persiste preferência <br> 4. Interface atualizada com novo tema |
+| **Pós-condição** | Tema alterado e preferência salva |
+
+### UC20 - Deletar Evento via Dashboard
+
+| Campo | Descrição |
+|-------|-----------|
+| **Ator** | Usuário |
+| **Pré-condição** | Dashboard aberto; evento existente |
+| **Fluxo Principal** | 1. Usuário clica no X do evento <br> 2. Sistema solicita confirmação <br> 3. Usuário confirma <br> 4. Sistema remove evento <br> 5. Dashboard atualiza lista |
+| **Fluxo Alternativo** | Se usuário cancela, evento é mantido |
+| **Pós-condição** | Evento removido e dashboard atualizado |
 
 ## 8. Planejamento dos Sprints
 
@@ -231,11 +361,11 @@ graph TB
 | TP5 | Semana 9-10 | Streak, temas, execução de testes, refinamentos |
 | TP6 | Semana 11-12 | Entrega final, documentação revisada, vídeo de demonstração |
 
-### Backlog para TP6 (Tarefas Futuras)
+### Backlog (Tarefas Futuras)
 
-- Integração com dispositivos wearables (Fitbit, Garmin)
-- Exportação de dados (CSV, JSON)
-- Metas e objetivos personalizados
+- Integração com dispositivos wearables (Fitbit, Garmin) - Issue #10 (Abandonada)
+- Exportação de dados (CSV, JSON) - Issue #11 (Aberta)
+- Metas e objetivos personalizados - Issue #12 (Aberta)
 - Notificações e lembretes
 - Sincronização entre dispositivos
 

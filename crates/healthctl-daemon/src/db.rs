@@ -304,7 +304,11 @@ impl Database {
             binds.push(ts);
         }
 
-        sql.push_str(" ORDER BY COALESCE(start_time, end_time, created_at) DESC");
+        // Default is newest first (DESC), reverse means chronological (ASC)
+        let order = if filter.reverse { "ASC" } else { "DESC" };
+        sql.push_str(&format!(
+            " ORDER BY COALESCE(start_time, end_time, created_at) {order}"
+        ));
 
         if let Some(limit) = filter.limit {
             sql.push_str(&format!(" LIMIT {limit}"));
@@ -462,53 +466,118 @@ impl Database {
         &self,
         period: &healthctl_lib::ipc::ReportPeriod,
     ) -> Result<healthctl_lib::ipc::ReportData> {
+        use healthctl_lib::ipc::ReportPeriod;
+
         let now = Utc::now();
         let days = match period {
-            healthctl_lib::ipc::ReportPeriod::Day => 1,
-            healthctl_lib::ipc::ReportPeriod::Week => 7,
-            healthctl_lib::ipc::ReportPeriod::Month => 30,
-            healthctl_lib::ipc::ReportPeriod::Year => 365,
+            ReportPeriod::Day => 1,
+            ReportPeriod::Week => 7,
+            ReportPeriod::Month => 30,
+            ReportPeriod::Year => 365,
         };
+
+        // The current period is the last `days` ending now (in progress).
+        let to = now;
         let from = now - chrono::Duration::days(days);
-        let ts = from.to_rfc3339();
+        // Fetch enough history for the previous period and the 4-period baseline.
+        let fetch_from = from - chrono::Duration::days(days * 4);
 
-        let total_events: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM events WHERE COALESCE(start_time, end_time, created_at) >= ?",
+        let events = self.events_between(fetch_from, to).await?;
+
+        Ok(healthctl_lib::report::compute_report(
+            &events,
+            period.clone(),
+            from,
+            to,
+            now,
+            // A trailing-window report is always "current" / in-progress.
+            true,
+        ))
+    }
+
+    /// Fetch all fully-detailed events whose anchor time falls in `[from, to)`.
+    /// Used by report aggregation, which needs the raw events to compute
+    /// breakdowns, comparisons, and projections in `healthctl_lib::report`.
+    async fn events_between(&self, from: DateTime<Utc>, to: DateTime<Utc>) -> Result<Vec<Event>> {
+        let from_ts = from.to_rfc3339();
+        let to_ts = to.to_rfc3339();
+
+        let rows = sqlx::query_as::<_, EventRow>(
+            "SELECT id, event_type, start_time, end_time, created_at FROM events
+             WHERE COALESCE(start_time, end_time, created_at) >= ?
+               AND COALESCE(start_time, end_time, created_at) < ?
+             ORDER BY COALESCE(start_time, end_time, created_at) ASC",
         )
-        .bind(&ts)
-        .fetch_one(&self.pool)
+        .bind(&from_ts)
+        .bind(&to_ts)
+        .fetch_all(&self.pool)
         .await?;
 
-        let total_calories: (f64,) = sqlx::query_as(
-            "SELECT COALESCE(SUM(em.value), 0.0) FROM event_metrics em
-             JOIN events e ON em.event_id = e.id
-             WHERE em.key = 'calories_kcal'
-             AND COALESCE(e.start_time, e.end_time, e.created_at) >= ?",
+        let mut events = Vec::with_capacity(rows.len());
+        for row in rows {
+            let mut event = row.into_event()?;
+            self.load_event_details(&mut event).await?;
+            events.push(event);
+        }
+        Ok(events)
+    }
+
+    /// Event candidates for shell completion: short id + a human-readable
+    /// description (emoji, type, date and tags), ordered most-recent first.
+    ///
+    /// `prefix` filters on the (full) id so that partially-typed short ids
+    /// still match. `limit` caps the number of candidates to keep completion
+    /// snappy and avoid straining SQLite.
+    pub async fn complete_events(
+        &self,
+        prefix: Option<&str>,
+        limit: u32,
+    ) -> Result<Vec<healthctl_lib::ipc::EventCompletion>> {
+        let mut sql = String::from(
+            "SELECT id, event_type, start_time, end_time, created_at FROM events WHERE 1=1",
+        );
+        let mut binds: Vec<String> = Vec::new();
+
+        if let Some(prefix) = prefix.filter(|p| !p.is_empty()) {
+            sql.push_str(" AND id LIKE ?");
+            binds.push(format!("{prefix}%"));
+        }
+
+        // Most-recent first (chronological, like `git show`'s newest-first list).
+        sql.push_str(" ORDER BY COALESCE(start_time, end_time, created_at) DESC");
+        sql.push_str(&format!(" LIMIT {limit}"));
+
+        let mut query = sqlx::query_as::<_, EventRow>(&sql);
+        for bind in &binds {
+            query = query.bind(bind);
+        }
+        let rows = query.fetch_all(&self.pool).await?;
+
+        let mut out = Vec::with_capacity(rows.len());
+        for row in rows {
+            let mut event = row.into_event()?;
+            self.load_event_details(&mut event).await?;
+            out.push(event_completion(&event));
+        }
+        Ok(out)
+    }
+
+    /// Recently-used tags, ordered by the most recent event carrying each tag
+    /// (most-recent first), capped at `limit` to avoid straining SQLite.
+    pub async fn recent_tags(&self, limit: u32) -> Result<Vec<String>> {
+        let rows: Vec<(String,)> = sqlx::query_as(
+            "SELECT t.tag
+             FROM event_tags t
+             JOIN events e ON e.id = t.event_id
+             GROUP BY t.tag
+             ORDER BY MAX(COALESCE(e.start_time, e.end_time, e.created_at)) DESC
+             LIMIT ?",
         )
-        .bind(&ts)
-        .fetch_one(&self.pool)
+        .bind(limit as i64)
+        .fetch_all(&self.pool)
         .await?;
 
-        let total_active: (f64,) = sqlx::query_as(
-            "SELECT COALESCE(SUM(
-                (julianday(end_time) - julianday(start_time)) * 86400.0
-             ), 0.0) FROM events
-             WHERE event_type NOT LIKE '%sleep%'
-             AND start_time IS NOT NULL AND end_time IS NOT NULL
-             AND COALESCE(start_time, end_time, created_at) >= ?",
-        )
-        .bind(&ts)
-        .fetch_one(&self.pool)
-        .await?;
-
-        Ok(healthctl_lib::ipc::ReportData {
-            period: period.clone(),
-            total_events: total_events.0 as u32,
-            total_calories: total_calories.0,
-            total_active_minutes: total_active.0 / 60.0,
-            avg_daily_calories: total_calories.0 / days as f64,
-            avg_daily_active_minutes: (total_active.0 / 60.0) / days as f64,
-        })
+        Ok(rows.into_iter().map(|(t,)| t).collect())
     }
 
     async fn load_event_details(&self, event: &mut Event) -> Result<()> {
@@ -539,6 +608,32 @@ impl Database {
         event.exercises = exercises.into_iter().map(|r| r.into_exercise()).collect();
 
         Ok(())
+    }
+}
+
+/// Build a shell-completion candidate from a fully-loaded event.
+///
+/// The description mirrors the columns a user sees in `healthctl list`
+/// (type + date + tags) so the completion menu tells them what each id is.
+fn event_completion(event: &Event) -> healthctl_lib::ipc::EventCompletion {
+    // Format to match the `healthctl list` table (which renders the stored
+    // UTC timestamp directly) so the same event reads identically in both.
+    let when = event.anchor_time().format("%b %d %H:%M");
+
+    let mut description = format!(
+        "{} {} · {}",
+        event.event_type.emoji(),
+        event.event_type.label(),
+        when
+    );
+    if !event.tags.is_empty() {
+        description.push_str(" · ");
+        description.push_str(&event.tags.join(", "));
+    }
+
+    healthctl_lib::ipc::EventCompletion {
+        short_id: event.id.to_string()[..8].to_string(),
+        description,
     }
 }
 

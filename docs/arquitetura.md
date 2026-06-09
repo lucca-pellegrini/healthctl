@@ -376,5 +376,5 @@ sequenceDiagram
 
 ---
 
-**Anterior:** [TP1 - Definição do Problema](./TP1.md)  
+**Anterior:** [Definição do Problema e Requisitos](./requisitos.md)  
 **Próximo:** [Plano de Testes](./testes.md)
