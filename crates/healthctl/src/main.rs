@@ -4,6 +4,7 @@ mod complete;
 mod daemon_ctl;
 mod dashboard_ctl;
 mod format;
+mod paths;
 
 use anyhow::Result;
 use healthctl_lib::ipc::{Request, Response, ResponseData};

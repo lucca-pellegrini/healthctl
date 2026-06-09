@@ -5,6 +5,7 @@ use std::os::unix::net::UnixStream;
 use std::process::Command;
 
 use crate::cli::{DaemonAction, DaemonCommand};
+use crate::paths::find_companion_binary;
 
 pub fn handle(cmd: DaemonCommand) -> Result<()> {
     match cmd.action {
@@ -36,16 +37,7 @@ fn start_daemon() -> Result<()> {
 
 /// Spawn the daemon binary in the background with stdio detached.
 pub fn spawn_daemon() -> Result<()> {
-    // Find the daemon binary next to ourselves.
-    let self_exe = std::env::current_exe()?;
-    let daemon_exe = self_exe
-        .parent()
-        .expect("binary has parent dir")
-        .join("healthctl-daemon");
-
-    if !daemon_exe.exists() {
-        anyhow::bail!("daemon binary not found at {}", daemon_exe.display());
-    }
+    let daemon_exe = find_companion_binary("healthctl-daemon")?;
 
     Command::new(&daemon_exe)
         .stdin(std::process::Stdio::null())

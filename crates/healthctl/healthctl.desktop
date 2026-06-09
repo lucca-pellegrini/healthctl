@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=healthctl
+Exec=healthctl
+Icon=healthctl
+Type=Application
+Categories=Utility;
+Comment=Health tracking CLI tool
+Terminal=true
