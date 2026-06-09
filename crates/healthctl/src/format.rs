@@ -1,7 +1,7 @@
 //! Pretty-printing utilities with ANSI colors, emojis, and Unicode formatting.
 
 use healthctl_lib::event::{ActivityKind, Event, EventType, MentalKind};
-use healthctl_lib::ipc::{ReportData, ReportPeriod, StatusSummary};
+use healthctl_lib::ipc::{Breakdown, ReportData, ReportPeriod, StatusSummary};
 use owo_colors::OwoColorize;
 use unicode_width::UnicodeWidthStr;
 
@@ -191,7 +191,10 @@ pub fn progress_bar_colored(ratio: f64, width: usize, color: BarColor) -> String
     }
 }
 
+/// A small palette for colored progress bars. Not all variants are used by
+/// every view; they form a complete, reusable palette.
 #[derive(Clone, Copy)]
+#[allow(dead_code)]
 pub enum BarColor {
     Cyan,
     Green,
@@ -210,14 +213,6 @@ pub fn format_tags(tags: &[String]) -> String {
         .map(|t| format!("[{}]", t.dimmed()))
         .collect::<Vec<_>>()
         .join(" ")
-}
-
-/// Format tags for table display (comma-separated, dimmed).
-pub fn format_tags_compact(tags: &[String]) -> String {
-    if tags.is_empty() {
-        return "—".dimmed().to_string();
-    }
-    tags.join(", ").dimmed().to_string()
 }
 
 /// Print a section header.
@@ -341,8 +336,20 @@ pub fn print_status(summary: &StatusSummary) {
     println!();
 }
 
-/// Print report with bars and colors.
-pub fn print_report(report: &ReportData, breakdown: Option<&[(String, u32)]>) {
+/// Identifies one of the six report cards (mirrors the dashboard stat cards).
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum ReportCard {
+    Steps,
+    Calories,
+    Distance,
+    Active,
+    Sleep,
+    Workouts,
+}
+
+/// Print a report: the six-card overview, followed by any requested detail
+/// cards (in `cards` order). With no detail cards, only the overview prints.
+pub fn print_report(report: &ReportData, cards: &[ReportCard]) {
     let period_str = match report.period {
         ReportPeriod::Day => "Daily",
         ReportPeriod::Week => "Weekly",
@@ -351,55 +358,311 @@ pub fn print_report(report: &ReportData, breakdown: Option<&[(String, u32)]>) {
     };
 
     println!();
-    println!(" {} {} {}", "📈", period_str.bold(), "Report".bold());
-    println!(" {}", "═".repeat(50).dimmed());
+    println!(
+        " 📈 {} {}   {}",
+        period_str.bold(),
+        "Report".bold(),
+        report.range_label.dimmed()
+    );
+    println!(" {}", "═".repeat(56).dimmed());
 
-    // By Activity breakdown if available
-    if let Some(breakdown) = breakdown {
-        if !breakdown.is_empty() {
-            print_section("By Activity");
-            let max_count = breakdown.iter().map(|(_, c)| *c).max().unwrap_or(1);
-            for (activity, count) in breakdown.iter().take(5) {
-                let ratio = *count as f64 / max_count as f64;
-                let bar = progress_bar_colored(ratio, 20, BarColor::Cyan);
-                println!("   {:<12} {} {:>3}x", activity.dimmed(), bar, count);
-            }
+    print_overview(report);
+
+    for card in cards {
+        match card {
+            ReportCard::Steps => print_steps_detail(report),
+            ReportCard::Calories => print_calories_detail(report),
+            ReportCard::Distance => print_distance_detail(report),
+            ReportCard::Active => print_active_detail(report),
+            ReportCard::Sleep => print_sleep_detail(report),
+            ReportCard::Workouts => print_workouts_detail(report),
         }
     }
 
-    print_section("Totals");
-    print_row(
-        "Events",
-        &report.total_events.to_string().bright_white().to_string(),
-    );
-    print_row(
-        "Calories",
-        &format!("{:.0} kcal", report.total_calories)
-            .yellow()
-            .to_string(),
-    );
-    print_row(
-        "Active Time",
-        &format_duration(report.total_active_minutes * 60.0)
-            .cyan()
-            .to_string(),
-    );
+    if cards.is_empty() {
+        println!(
+            "\n {}",
+            "Tip: add -S/-c/-d/-A/-s/-w for details, or -a for all.".dimmed()
+        );
+    }
+    println!();
+}
 
-    print_section("Daily Averages");
-    print_row(
-        "Calories",
-        &format!("{:.0} kcal", report.avg_daily_calories)
-            .yellow()
-            .to_string(),
-    );
-    print_row(
-        "Active Time",
-        &format!("{:.0} min", report.avg_daily_active_minutes)
-            .cyan()
-            .to_string(),
-    );
+/// The six-card overview grid (two columns of three rows).
+fn print_overview(report: &ReportData) {
+    let sleep_str = report
+        .sleep
+        .avg_hours
+        .map(|h| format!("{h:.1}"))
+        .unwrap_or_else(|| "—".into());
+
+    // (emoji, value, label) for each card.
+    let cells: [(&str, String, &str); 6] = [
+        ("👣", fmt_int(report.steps.total), "Steps"),
+        ("🔥", fmt_int(report.calories.total), "Calories"),
+        ("📏", format!("{:.1}", report.distance.total_km), "km"),
+        ("⏱️", fmt_int(report.active.total_minutes), "Active min"),
+        ("😴", sleep_str, "Avg Sleep"),
+        ("💪", report.workouts.count.to_string(), "Workouts"),
+    ];
 
     println!();
+    // Render three rows of two cards.
+    for row in cells.chunks(2) {
+        let mut line = String::from("  ");
+        for (emoji, value, label) in row {
+            let cell_plain = format!("{emoji} {}  {}", value, label);
+            let colored = format!(
+                "{} {}  {}",
+                emoji,
+                value.bold().bright_white(),
+                label.dimmed()
+            );
+            line.push_str(&pad_right(&colored, &cell_plain, 28));
+        }
+        println!("{}", line.trim_end());
+    }
+}
+
+/// Print a labeled detail section header (a card title).
+fn print_card_title(emoji: &str, title: &str) {
+    println!("\n {} {}", emoji, title.bold());
+    println!(" {}", "─".repeat(48).dimmed());
+}
+
+/// Print a comparison row like "vs Last Week  +7.7%".
+fn print_comparison(label: &str, pct: f64) {
+    print_row(label, &format_percentage(pct));
+}
+
+/// Render a "By Activity" breakdown with proportional Unicode bars.
+fn print_breakdown(items: &[Breakdown], color: BarColor, fmt_value: impl Fn(f64) -> String) {
+    if items.is_empty() {
+        return;
+    }
+    print_section("By Activity");
+    let max = items
+        .iter()
+        .map(|b| b.value)
+        .fold(0.0_f64, f64::max)
+        .max(1.0);
+    // Align labels and values by display width.
+    let label_w = items
+        .iter()
+        .map(|b| display_width(&b.label))
+        .max()
+        .unwrap_or(0)
+        .max(8);
+    let val_strs: Vec<String> = items.iter().map(|b| fmt_value(b.value)).collect();
+    let val_w = val_strs.iter().map(|s| display_width(s)).max().unwrap_or(0);
+
+    for (b, val) in items.iter().zip(val_strs.iter()) {
+        let ratio = b.value / max;
+        let bar = progress_bar_colored(ratio, 18, color);
+        let label_cell = pad_right(&b.label.dimmed().to_string(), &b.label, label_w);
+        let val_cell = pad_left(&val.bright_white().to_string(), val, val_w);
+        println!("   {label_cell}  {bar}  {val_cell}");
+    }
+}
+
+fn print_steps_detail(report: &ReportData) {
+    let s = &report.steps;
+    print_card_title("👣", "Steps");
+    print_section("Statistics");
+    print_row("Total", &fmt_int(s.total).bright_white().to_string());
+    print_row("Daily Average", &fmt_int(s.daily_avg).cyan().to_string());
+    if let Some(ref day) = s.best_day {
+        print_row(
+            "Best Day",
+            &format!("{} ({})", day, fmt_int(s.best_day_value)),
+        );
+    }
+    print_section("Comparisons");
+    print_comparison("vs Previous", s.vs_previous);
+    print_comparison("vs Average", s.vs_average);
+    if let Some(p) = s.projection {
+        print_section("Projection");
+        print_row("End of Period", &fmt_int(p).yellow().to_string());
+    }
+}
+
+fn print_calories_detail(report: &ReportData) {
+    let c = &report.calories;
+    print_card_title("🔥", "Calories");
+    print_breakdown(&c.by_activity, BarColor::Yellow, |v| format!("{v:.0} kcal"));
+    print_section("Statistics");
+    print_row(
+        "Total",
+        &format!("{:.0} kcal", c.total).bright_white().to_string(),
+    );
+    print_row(
+        "Daily Average",
+        &format!("{:.0} kcal", c.daily_avg).cyan().to_string(),
+    );
+    if let Some(ref day) = c.best_day {
+        print_row(
+            "Best Day",
+            &format!("{} ({:.0} kcal)", day, c.best_day_value),
+        );
+    }
+    print_section("Comparisons");
+    print_comparison("vs Previous", c.vs_previous);
+    if let Some(p) = c.projection {
+        print_section("Projection");
+        print_row(
+            "End of Period",
+            &format!("{p:.0} kcal").yellow().to_string(),
+        );
+    }
+}
+
+fn print_distance_detail(report: &ReportData) {
+    let d = &report.distance;
+    print_card_title("📏", "Distance");
+    print_breakdown(&d.by_activity, BarColor::Cyan, |v| format!("{v:.1} km"));
+    print_section("Statistics");
+    print_row(
+        "Total",
+        &format!("{:.1} km", d.total_km).bright_white().to_string(),
+    );
+    if let Some(ref day) = d.best_day {
+        print_row("Best Day", &format!("{} ({:.1} km)", day, d.best_day_value));
+    }
+    print_section("Comparisons");
+    print_comparison("vs Previous", d.vs_previous);
+    if let Some(p) = d.projection {
+        print_section("Projection");
+        print_row("End of Period", &format!("{p:.1} km").yellow().to_string());
+    }
+}
+
+fn print_active_detail(report: &ReportData) {
+    let a = &report.active;
+    print_card_title("⏱️", "Active Time");
+    print_breakdown(&a.by_activity, BarColor::Green, |v| {
+        format_duration(v * 60.0)
+    });
+    print_section("Statistics");
+    print_row(
+        "Total",
+        &format_duration(a.total_minutes * 60.0)
+            .bright_white()
+            .to_string(),
+    );
+    print_row(
+        "Daily Average",
+        &format!("{:.0} min", a.daily_avg).cyan().to_string(),
+    );
+    if let Some(ref day) = a.most_active_day {
+        print_row("Most Active Day", day);
+    }
+    print_section("Comparisons");
+    print_comparison("vs Previous", a.vs_previous);
+    if let Some(p) = a.projection {
+        print_section("Projection");
+        print_row(
+            "End of Period",
+            &format_duration(p * 60.0).yellow().to_string(),
+        );
+    }
+}
+
+fn print_sleep_detail(report: &ReportData) {
+    let s = &report.sleep;
+    print_card_title("😴", "Sleep");
+    if !s.nights.is_empty() {
+        print_section("Sleep Log");
+        // Show up to 7 most-recent nights with a small bar (scaled to 10h).
+        for night in s.nights.iter().take(7) {
+            let ratio = (night.hours / 10.0).min(1.0);
+            let bar = progress_bar_colored(ratio, 14, BarColor::Blue);
+            let q = night.quality.map(|q| format!(" q{q}")).unwrap_or_default();
+            let date_cell = pad_right(&night.date, &night.date, 9);
+            println!(
+                "   {date_cell}  {bar}  {}{}",
+                format!("{:.1}h", night.hours).bright_white(),
+                q.dimmed()
+            );
+        }
+    }
+    print_section("Statistics");
+    if let Some(avg) = s.avg_hours {
+        print_row(
+            "Avg / Night",
+            &format!("{avg:.1}h").bright_white().to_string(),
+        );
+    }
+    if let Some(ref n) = s.best_night {
+        print_row("Best Night", &format!("{} ({:.1}h)", n, s.best_night_hours));
+    }
+    if let Some(ref n) = s.worst_night {
+        print_row(
+            "Worst Night",
+            &format!("{} ({:.1}h)", n, s.worst_night_hours),
+        );
+    }
+    if s.avg_quality > 0.0 {
+        print_row("Avg Quality", &format!("{:.1}/10", s.avg_quality));
+    }
+    print_section("Comparisons");
+    print_comparison("vs Previous", s.vs_previous);
+}
+
+fn print_workouts_detail(report: &ReportData) {
+    let w = &report.workouts;
+    print_card_title("💪", "Workouts");
+    print_breakdown(&w.by_type, BarColor::Purple, |v| format!("{v:.0}x"));
+    print_section("Statistics");
+    print_row("Count", &w.count.to_string().bright_white().to_string());
+    print_row(
+        "Total Duration",
+        &format_duration(w.total_duration * 60.0).cyan().to_string(),
+    );
+    print_row(
+        "Average Duration",
+        &format!("{:.0} min", w.avg_duration).cyan().to_string(),
+    );
+    print_section("Comparisons");
+    print_comparison("vs Previous", w.vs_previous);
+    if !w.muscle_groups.is_empty() {
+        print_section("Muscle Groups Worked");
+        print!("   ");
+        let badges: Vec<String> = w
+            .muscle_groups
+            .iter()
+            .map(|m| {
+                let label = capitalize(m);
+                format!(" {} ", label)
+                    .black()
+                    .on_bright_magenta()
+                    .to_string()
+            })
+            .collect();
+        println!("{}", badges.join(" "));
+    }
+}
+
+/// Format a floating count as a thousands-grouped integer, e.g. 56904 → "56,904".
+fn fmt_int(v: f64) -> String {
+    let n = v.round() as i64;
+    let s = n.abs().to_string();
+    let mut out = String::new();
+    for (i, ch) in s.chars().enumerate() {
+        if i > 0 && (s.len() - i) % 3 == 0 {
+            out.push(',');
+        }
+        out.push(ch);
+    }
+    if n < 0 { format!("-{out}") } else { out }
+}
+
+/// Capitalize the first letter of a word.
+fn capitalize(s: &str) -> String {
+    let mut chars = s.chars();
+    match chars.next() {
+        Some(c) => format!("{}{}", c.to_uppercase(), chars.as_str()),
+        None => String::new(),
+    }
 }
 
 /// Print events as a formatted table.

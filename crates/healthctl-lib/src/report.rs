@@ -89,10 +89,10 @@ fn activity_label(e: &Event) -> String {
 
 fn get_sleep_quality(e: &Event) -> Option<i32> {
     for tag in &e.tags {
-        if let Some(rest) = tag.strip_prefix("quality:") {
-            if let Ok(n) = rest.trim().parse::<i32>() {
-                return Some(n);
-            }
+        if let Some(rest) = tag.strip_prefix("quality:")
+            && let Ok(n) = rest.trim().parse::<i32>()
+        {
+            return Some(n);
         }
     }
     None
