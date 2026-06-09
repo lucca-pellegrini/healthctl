@@ -96,10 +96,17 @@ fn main() -> Result<()> {
             let response = client::send_request(Request::Status)?;
             client::print_response(response);
         }
-        cli::Command::Report { period } => {
-            let period = cli::parse_report_period(&period)?;
+        cli::Command::Report(report_cmd) => {
+            let period = cli::parse_report_period(&report_cmd.period)?;
+            let cards = report_cmd.selected_cards();
             let response = client::send_request(Request::Report { period })?;
-            client::print_response(response);
+            match response {
+                Response::Ok(ResponseData::Report(report)) => {
+                    format::print_report(&report, &cards);
+                }
+                Response::Error { message } => anyhow::bail!("{message}"),
+                _ => anyhow::bail!("unexpected response from daemon"),
+            }
         }
         cli::Command::Daemon(daemon_cmd) => {
             daemon_ctl::handle(daemon_cmd)?;

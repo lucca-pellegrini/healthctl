@@ -1,8 +1,53 @@
 //! Pretty-printing utilities with ANSI colors, emojis, and Unicode formatting.
 
 use healthctl_lib::event::{ActivityKind, Event, EventType, MentalKind};
-use healthctl_lib::ipc::{ReportData, ReportPeriod, StatusSummary};
+use healthctl_lib::ipc::{Breakdown, ReportData, ReportPeriod, StatusSummary};
 use owo_colors::OwoColorize;
+use unicode_width::UnicodeWidthStr;
+
+/// Display width of a string, accounting for East Asian Width (emojis count as 2).
+/// Note: this operates on the *plain* (un-colored) text — never pass ANSI codes here.
+pub fn display_width(s: &str) -> usize {
+    UnicodeWidthStr::width(s)
+}
+
+/// Truncate a plain string to at most `max` display columns, appending `…` if cut.
+/// The ellipsis itself counts toward the width budget.
+pub fn truncate_to_width(s: &str, max: usize) -> String {
+    if display_width(s) <= max {
+        return s.to_string();
+    }
+    if max == 0 {
+        return String::new();
+    }
+    // Reserve one column for the ellipsis.
+    let budget = max.saturating_sub(1);
+    let mut out = String::new();
+    let mut w = 0;
+    for ch in s.chars() {
+        let cw = UnicodeWidthStr::width(ch.to_string().as_str());
+        if w + cw > budget {
+            break;
+        }
+        out.push(ch);
+        w += cw;
+    }
+    out.push('…');
+    out
+}
+
+/// Right-pad a *colored* cell to a target display width, given its plain text
+/// (used only to measure width, since ANSI codes have zero display width).
+pub fn pad_right(colored: &str, plain: &str, width: usize) -> String {
+    let pad = width.saturating_sub(display_width(plain));
+    format!("{}{}", colored, " ".repeat(pad))
+}
+
+/// Left-pad a *colored* cell to a target display width, given its plain text.
+pub fn pad_left(colored: &str, plain: &str, width: usize) -> String {
+    let pad = width.saturating_sub(display_width(plain));
+    format!("{}{}", " ".repeat(pad), colored)
+}
 
 /// Get emoji for event type.
 pub fn event_emoji(event_type: &EventType) -> &'static str {
@@ -146,7 +191,10 @@ pub fn progress_bar_colored(ratio: f64, width: usize, color: BarColor) -> String
     }
 }
 
+/// A small palette for colored progress bars. Not all variants are used by
+/// every view; they form a complete, reusable palette.
 #[derive(Clone, Copy)]
+#[allow(dead_code)]
 pub enum BarColor {
     Cyan,
     Green,
@@ -165,14 +213,6 @@ pub fn format_tags(tags: &[String]) -> String {
         .map(|t| format!("[{}]", t.dimmed()))
         .collect::<Vec<_>>()
         .join(" ")
-}
-
-/// Format tags for table display (comma-separated, dimmed).
-pub fn format_tags_compact(tags: &[String]) -> String {
-    if tags.is_empty() {
-        return "—".dimmed().to_string();
-    }
-    tags.join(", ").dimmed().to_string()
 }
 
 /// Print a section header.
@@ -296,8 +336,20 @@ pub fn print_status(summary: &StatusSummary) {
     println!();
 }
 
-/// Print report with bars and colors.
-pub fn print_report(report: &ReportData, breakdown: Option<&[(String, u32)]>) {
+/// Identifies one of the six report cards (mirrors the dashboard stat cards).
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum ReportCard {
+    Steps,
+    Calories,
+    Distance,
+    Active,
+    Sleep,
+    Workouts,
+}
+
+/// Print a report: the six-card overview, followed by any requested detail
+/// cards (in `cards` order). With no detail cards, only the overview prints.
+pub fn print_report(report: &ReportData, cards: &[ReportCard]) {
     let period_str = match report.period {
         ReportPeriod::Day => "Daily",
         ReportPeriod::Week => "Weekly",
@@ -306,55 +358,311 @@ pub fn print_report(report: &ReportData, breakdown: Option<&[(String, u32)]>) {
     };
 
     println!();
-    println!(" {} {} {}", "📈", period_str.bold(), "Report".bold());
-    println!(" {}", "═".repeat(50).dimmed());
+    println!(
+        " 📈 {} {}   {}",
+        period_str.bold(),
+        "Report".bold(),
+        report.range_label.dimmed()
+    );
+    println!(" {}", "═".repeat(56).dimmed());
 
-    // By Activity breakdown if available
-    if let Some(breakdown) = breakdown {
-        if !breakdown.is_empty() {
-            print_section("By Activity");
-            let max_count = breakdown.iter().map(|(_, c)| *c).max().unwrap_or(1);
-            for (activity, count) in breakdown.iter().take(5) {
-                let ratio = *count as f64 / max_count as f64;
-                let bar = progress_bar_colored(ratio, 20, BarColor::Cyan);
-                println!("   {:<12} {} {:>3}x", activity.dimmed(), bar, count);
-            }
+    print_overview(report);
+
+    for card in cards {
+        match card {
+            ReportCard::Steps => print_steps_detail(report),
+            ReportCard::Calories => print_calories_detail(report),
+            ReportCard::Distance => print_distance_detail(report),
+            ReportCard::Active => print_active_detail(report),
+            ReportCard::Sleep => print_sleep_detail(report),
+            ReportCard::Workouts => print_workouts_detail(report),
         }
     }
 
-    print_section("Totals");
-    print_row(
-        "Events",
-        &report.total_events.to_string().bright_white().to_string(),
-    );
-    print_row(
-        "Calories",
-        &format!("{:.0} kcal", report.total_calories)
-            .yellow()
-            .to_string(),
-    );
-    print_row(
-        "Active Time",
-        &format_duration(report.total_active_minutes * 60.0)
-            .cyan()
-            .to_string(),
-    );
+    if cards.is_empty() {
+        println!(
+            "\n {}",
+            "Tip: add -S/-c/-d/-A/-s/-w for details, or -a for all.".dimmed()
+        );
+    }
+    println!();
+}
 
-    print_section("Daily Averages");
-    print_row(
-        "Calories",
-        &format!("{:.0} kcal", report.avg_daily_calories)
-            .yellow()
-            .to_string(),
-    );
-    print_row(
-        "Active Time",
-        &format!("{:.0} min", report.avg_daily_active_minutes)
-            .cyan()
-            .to_string(),
-    );
+/// The six-card overview grid (two columns of three rows).
+fn print_overview(report: &ReportData) {
+    let sleep_str = report
+        .sleep
+        .avg_hours
+        .map(|h| format!("{h:.1}"))
+        .unwrap_or_else(|| "—".into());
+
+    // (emoji, value, label) for each card.
+    let cells: [(&str, String, &str); 6] = [
+        ("👣", fmt_int(report.steps.total), "Steps"),
+        ("🔥", fmt_int(report.calories.total), "Calories"),
+        ("📏", format!("{:.1}", report.distance.total_km), "km"),
+        ("⏱️", fmt_int(report.active.total_minutes), "Active min"),
+        ("😴", sleep_str, "Avg Sleep"),
+        ("💪", report.workouts.count.to_string(), "Workouts"),
+    ];
 
     println!();
+    // Render three rows of two cards.
+    for row in cells.chunks(2) {
+        let mut line = String::from("  ");
+        for (emoji, value, label) in row {
+            let cell_plain = format!("{emoji} {}  {}", value, label);
+            let colored = format!(
+                "{} {}  {}",
+                emoji,
+                value.bold().bright_white(),
+                label.dimmed()
+            );
+            line.push_str(&pad_right(&colored, &cell_plain, 28));
+        }
+        println!("{}", line.trim_end());
+    }
+}
+
+/// Print a labeled detail section header (a card title).
+fn print_card_title(emoji: &str, title: &str) {
+    println!("\n {} {}", emoji, title.bold());
+    println!(" {}", "─".repeat(48).dimmed());
+}
+
+/// Print a comparison row like "vs Last Week  +7.7%".
+fn print_comparison(label: &str, pct: f64) {
+    print_row(label, &format_percentage(pct));
+}
+
+/// Render a "By Activity" breakdown with proportional Unicode bars.
+fn print_breakdown(items: &[Breakdown], color: BarColor, fmt_value: impl Fn(f64) -> String) {
+    if items.is_empty() {
+        return;
+    }
+    print_section("By Activity");
+    let max = items
+        .iter()
+        .map(|b| b.value)
+        .fold(0.0_f64, f64::max)
+        .max(1.0);
+    // Align labels and values by display width.
+    let label_w = items
+        .iter()
+        .map(|b| display_width(&b.label))
+        .max()
+        .unwrap_or(0)
+        .max(8);
+    let val_strs: Vec<String> = items.iter().map(|b| fmt_value(b.value)).collect();
+    let val_w = val_strs.iter().map(|s| display_width(s)).max().unwrap_or(0);
+
+    for (b, val) in items.iter().zip(val_strs.iter()) {
+        let ratio = b.value / max;
+        let bar = progress_bar_colored(ratio, 18, color);
+        let label_cell = pad_right(&b.label.dimmed().to_string(), &b.label, label_w);
+        let val_cell = pad_left(&val.bright_white().to_string(), val, val_w);
+        println!("   {label_cell}  {bar}  {val_cell}");
+    }
+}
+
+fn print_steps_detail(report: &ReportData) {
+    let s = &report.steps;
+    print_card_title("👣", "Steps");
+    print_section("Statistics");
+    print_row("Total", &fmt_int(s.total).bright_white().to_string());
+    print_row("Daily Average", &fmt_int(s.daily_avg).cyan().to_string());
+    if let Some(ref day) = s.best_day {
+        print_row(
+            "Best Day",
+            &format!("{} ({})", day, fmt_int(s.best_day_value)),
+        );
+    }
+    print_section("Comparisons");
+    print_comparison("vs Previous", s.vs_previous);
+    print_comparison("vs Average", s.vs_average);
+    if let Some(p) = s.projection {
+        print_section("Projection");
+        print_row("End of Period", &fmt_int(p).yellow().to_string());
+    }
+}
+
+fn print_calories_detail(report: &ReportData) {
+    let c = &report.calories;
+    print_card_title("🔥", "Calories");
+    print_breakdown(&c.by_activity, BarColor::Yellow, |v| format!("{v:.0} kcal"));
+    print_section("Statistics");
+    print_row(
+        "Total",
+        &format!("{:.0} kcal", c.total).bright_white().to_string(),
+    );
+    print_row(
+        "Daily Average",
+        &format!("{:.0} kcal", c.daily_avg).cyan().to_string(),
+    );
+    if let Some(ref day) = c.best_day {
+        print_row(
+            "Best Day",
+            &format!("{} ({:.0} kcal)", day, c.best_day_value),
+        );
+    }
+    print_section("Comparisons");
+    print_comparison("vs Previous", c.vs_previous);
+    if let Some(p) = c.projection {
+        print_section("Projection");
+        print_row(
+            "End of Period",
+            &format!("{p:.0} kcal").yellow().to_string(),
+        );
+    }
+}
+
+fn print_distance_detail(report: &ReportData) {
+    let d = &report.distance;
+    print_card_title("📏", "Distance");
+    print_breakdown(&d.by_activity, BarColor::Cyan, |v| format!("{v:.1} km"));
+    print_section("Statistics");
+    print_row(
+        "Total",
+        &format!("{:.1} km", d.total_km).bright_white().to_string(),
+    );
+    if let Some(ref day) = d.best_day {
+        print_row("Best Day", &format!("{} ({:.1} km)", day, d.best_day_value));
+    }
+    print_section("Comparisons");
+    print_comparison("vs Previous", d.vs_previous);
+    if let Some(p) = d.projection {
+        print_section("Projection");
+        print_row("End of Period", &format!("{p:.1} km").yellow().to_string());
+    }
+}
+
+fn print_active_detail(report: &ReportData) {
+    let a = &report.active;
+    print_card_title("⏱️", "Active Time");
+    print_breakdown(&a.by_activity, BarColor::Green, |v| {
+        format_duration(v * 60.0)
+    });
+    print_section("Statistics");
+    print_row(
+        "Total",
+        &format_duration(a.total_minutes * 60.0)
+            .bright_white()
+            .to_string(),
+    );
+    print_row(
+        "Daily Average",
+        &format!("{:.0} min", a.daily_avg).cyan().to_string(),
+    );
+    if let Some(ref day) = a.most_active_day {
+        print_row("Most Active Day", day);
+    }
+    print_section("Comparisons");
+    print_comparison("vs Previous", a.vs_previous);
+    if let Some(p) = a.projection {
+        print_section("Projection");
+        print_row(
+            "End of Period",
+            &format_duration(p * 60.0).yellow().to_string(),
+        );
+    }
+}
+
+fn print_sleep_detail(report: &ReportData) {
+    let s = &report.sleep;
+    print_card_title("😴", "Sleep");
+    if !s.nights.is_empty() {
+        print_section("Sleep Log");
+        // Show up to 7 most-recent nights with a small bar (scaled to 10h).
+        for night in s.nights.iter().take(7) {
+            let ratio = (night.hours / 10.0).min(1.0);
+            let bar = progress_bar_colored(ratio, 14, BarColor::Blue);
+            let q = night.quality.map(|q| format!(" q{q}")).unwrap_or_default();
+            let date_cell = pad_right(&night.date, &night.date, 9);
+            println!(
+                "   {date_cell}  {bar}  {}{}",
+                format!("{:.1}h", night.hours).bright_white(),
+                q.dimmed()
+            );
+        }
+    }
+    print_section("Statistics");
+    if let Some(avg) = s.avg_hours {
+        print_row(
+            "Avg / Night",
+            &format!("{avg:.1}h").bright_white().to_string(),
+        );
+    }
+    if let Some(ref n) = s.best_night {
+        print_row("Best Night", &format!("{} ({:.1}h)", n, s.best_night_hours));
+    }
+    if let Some(ref n) = s.worst_night {
+        print_row(
+            "Worst Night",
+            &format!("{} ({:.1}h)", n, s.worst_night_hours),
+        );
+    }
+    if s.avg_quality > 0.0 {
+        print_row("Avg Quality", &format!("{:.1}/10", s.avg_quality));
+    }
+    print_section("Comparisons");
+    print_comparison("vs Previous", s.vs_previous);
+}
+
+fn print_workouts_detail(report: &ReportData) {
+    let w = &report.workouts;
+    print_card_title("💪", "Workouts");
+    print_breakdown(&w.by_type, BarColor::Purple, |v| format!("{v:.0}x"));
+    print_section("Statistics");
+    print_row("Count", &w.count.to_string().bright_white().to_string());
+    print_row(
+        "Total Duration",
+        &format_duration(w.total_duration * 60.0).cyan().to_string(),
+    );
+    print_row(
+        "Average Duration",
+        &format!("{:.0} min", w.avg_duration).cyan().to_string(),
+    );
+    print_section("Comparisons");
+    print_comparison("vs Previous", w.vs_previous);
+    if !w.muscle_groups.is_empty() {
+        print_section("Muscle Groups Worked");
+        print!("   ");
+        let badges: Vec<String> = w
+            .muscle_groups
+            .iter()
+            .map(|m| {
+                let label = capitalize(m);
+                format!(" {} ", label)
+                    .black()
+                    .on_bright_magenta()
+                    .to_string()
+            })
+            .collect();
+        println!("{}", badges.join(" "));
+    }
+}
+
+/// Format a floating count as a thousands-grouped integer, e.g. 56904 → "56,904".
+fn fmt_int(v: f64) -> String {
+    let n = v.round() as i64;
+    let s = n.abs().to_string();
+    let mut out = String::new();
+    for (i, ch) in s.chars().enumerate() {
+        if i > 0 && (s.len() - i) % 3 == 0 {
+            out.push(',');
+        }
+        out.push(ch);
+    }
+    if n < 0 { format!("-{out}") } else { out }
+}
+
+/// Capitalize the first letter of a word.
+fn capitalize(s: &str) -> String {
+    let mut chars = s.chars();
+    match chars.next() {
+        Some(c) => format!("{}{}", c.to_uppercase(), chars.as_str()),
+        None => String::new(),
+    }
 }
 
 /// Print events as a formatted table.
@@ -364,55 +672,27 @@ pub fn print_events_table(events: &[Event]) {
         return;
     }
 
-    // Table constants
-    let id_w = 8;
-    let date_w = 14;
-    let type_w = 14;
-    let dur_w = 8;
-    let tags_w = 30;
+    // Column display widths.
+    let widths = [8usize, 14, 14, 8, 30]; // ID, Date, Type, Duration, Tags
 
     // Header
     println!();
-    println!(
-        " {}{}{}{}{}{}{}{}{}{}",
-        "┌".dimmed(),
-        "─".repeat(id_w + 2).dimmed(),
-        "┬".dimmed(),
-        "─".repeat(date_w + 2).dimmed(),
-        "┬".dimmed(),
-        "─".repeat(type_w + 2).dimmed(),
-        "┬".dimmed(),
-        "─".repeat(dur_w + 2).dimmed(),
-        "┬".dimmed(),
-        "─".repeat(tags_w + 2).dimmed(),
-    );
-    println!(
-        " {} {:<id_w$} {} {:<date_w$} {} {:<type_w$} {} {:>dur_w$} {} {:<tags_w$} {}",
-        "│".dimmed(),
-        "ID".bold(),
-        "│".dimmed(),
-        "Date".bold(),
-        "│".dimmed(),
-        "Type".bold(),
-        "│".dimmed(),
-        "Duration".bold(),
-        "│".dimmed(),
-        "Tags".bold(),
-        "│".dimmed(),
-    );
-    println!(
-        " {}{}{}{}{}{}{}{}{}{}",
-        "├".dimmed(),
-        "─".repeat(id_w + 2).dimmed(),
-        "┼".dimmed(),
-        "─".repeat(date_w + 2).dimmed(),
-        "┼".dimmed(),
-        "─".repeat(type_w + 2).dimmed(),
-        "┼".dimmed(),
-        "─".repeat(dur_w + 2).dimmed(),
-        "┼".dimmed(),
-        "─".repeat(tags_w + 2).dimmed(),
-    );
+    print_table_border(&widths, '┌', '┬', '┐');
+    let headers = ["ID", "Date", "Type", "Duration", "Tags"];
+    let header_cells: Vec<String> = headers
+        .iter()
+        .enumerate()
+        .map(|(i, h)| {
+            // Duration is right-aligned, the rest left-aligned.
+            if i == 3 {
+                pad_left(&h.bold().to_string(), h, widths[i])
+            } else {
+                pad_right(&h.bold().to_string(), h, widths[i])
+            }
+        })
+        .collect();
+    print_table_row(&header_cells);
+    print_table_border(&widths, '├', '┼', '┤');
 
     // Rows
     for event in events {
@@ -429,60 +709,60 @@ pub fn print_events_table(events: &[Event]) {
 
         let dur = event
             .duration_secs()
-            .map(|d| format_duration(d))
+            .map(format_duration)
             .unwrap_or_else(|| "—".into());
 
-        let tags = if event.tags.is_empty() {
-            "—".dimmed().to_string()
+        // Tags: truncate by display width so the cell never exceeds the column.
+        let (tags_colored, tags_plain) = if event.tags.is_empty() {
+            ("—".dimmed().to_string(), "—".to_string())
         } else {
-            let tag_str = event.tags.join(", ");
-            if tag_str.len() > tags_w {
-                format!("{}…", &tag_str[..tags_w - 1]).dimmed().to_string()
-            } else {
-                tag_str.dimmed().to_string()
-            }
+            let tag_str = truncate_to_width(&event.tags.join(", "), widths[4]);
+            (tag_str.dimmed().to_string(), tag_str)
         };
 
-        // Calculate padding for type column (accounting for ANSI codes)
-        let type_padding = type_w.saturating_sub(type_plain.chars().count());
-        let type_display = format!("{}{}", type_colored, " ".repeat(type_padding));
-
-        println!(
-            " {} {:<id_w$} {} {:<date_w$} {} {} {} {:>dur_w$} {} {:<tags_w$} {}",
-            "│".dimmed(),
-            id.bright_black(),
-            "│".dimmed(),
-            date,
-            "│".dimmed(),
-            type_display,
-            "│".dimmed(),
-            dur.bright_white(),
-            "│".dimmed(),
-            tags,
-            "│".dimmed(),
-        );
+        // Every column is padded by *display width* (emojis count as 2 columns),
+        // measuring against the plain (un-colored) text.
+        let cells = [
+            pad_right(&id.bright_black().to_string(), id, widths[0]),
+            pad_right(&date, &date, widths[1]),
+            pad_right(&type_colored, &type_plain, widths[2]),
+            pad_left(&dur.bright_white().to_string(), &dur, widths[3]),
+            pad_right(&tags_colored, &tags_plain, widths[4]),
+        ];
+        print_table_row(&cells);
     }
 
     // Footer
-    println!(
-        " {}{}{}{}{}{}{}{}{}{}",
-        "└".dimmed(),
-        "─".repeat(id_w + 2).dimmed(),
-        "┴".dimmed(),
-        "─".repeat(date_w + 2).dimmed(),
-        "┴".dimmed(),
-        "─".repeat(type_w + 2).dimmed(),
-        "┴".dimmed(),
-        "─".repeat(dur_w + 2).dimmed(),
-        "┴".dimmed(),
-        "─".repeat(tags_w + 2).dimmed(),
-    );
+    print_table_border(&widths, '└', '┴', '┘');
 
     println!(
         " {} {}\n",
         "📋".dimmed(),
         format!("{} event(s)", events.len()).dimmed()
     );
+}
+
+/// Print a horizontal table border given column widths and the corner/junction chars.
+fn print_table_border(widths: &[usize], left: char, mid: char, right: char) {
+    let mut line = String::new();
+    line.push(left);
+    for (i, w) in widths.iter().enumerate() {
+        line.push_str(&"─".repeat(w + 2));
+        if i + 1 < widths.len() {
+            line.push(mid);
+        }
+    }
+    line.push(right);
+    println!(" {}", line.dimmed());
+}
+
+/// Print a single table row from pre-padded cells.
+fn print_table_row(cells: &[String]) {
+    let mut out = format!(" {}", "│".dimmed());
+    for cell in cells {
+        out.push_str(&format!(" {} {}", cell, "│".dimmed()));
+    }
+    println!("{out}");
 }
 
 /// Print event summary for delete confirmation.
@@ -557,5 +837,63 @@ fn format_metric_value(key: &str, val: f64) -> String {
         } else {
             format!("{val}")
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_display_width_ascii() {
+        assert_eq!(display_width("hello"), 5);
+        assert_eq!(display_width(""), 0);
+    }
+
+    #[test]
+    fn test_display_width_emoji_double() {
+        // Emojis render as two columns in most terminals.
+        assert_eq!(display_width("🚶"), 2);
+        assert_eq!(display_width("💪"), 2);
+        // "💪 Strength" = 2 (emoji) + 1 (space) + 8 (Strength) = 11
+        assert_eq!(display_width("💪 Strength"), 11);
+    }
+
+    #[test]
+    fn test_truncate_to_width_no_cut() {
+        assert_eq!(truncate_to_width("daily", 30), "daily");
+    }
+
+    #[test]
+    fn test_truncate_to_width_cuts_with_ellipsis() {
+        let s = "glutes, gym, hamstrings, legs, quads";
+        let out = truncate_to_width(s, 30);
+        // Must never exceed the column width.
+        assert!(display_width(&out) <= 30);
+        assert!(out.ends_with('…'));
+    }
+
+    #[test]
+    fn test_truncate_to_width_multibyte_safe() {
+        // Should not panic on a multibyte boundary.
+        let s = "área, ção, naïve, café";
+        let out = truncate_to_width(s, 10);
+        assert!(display_width(&out) <= 10);
+    }
+
+    #[test]
+    fn test_pad_right_accounts_for_emoji() {
+        // "🚶 Walk" has display width 7 (2 + 1 + 4); padding to 14 adds 7 spaces.
+        let plain = "🚶 Walk";
+        let padded = pad_right(plain, plain, 14);
+        // The padded plain text should have display width exactly 14.
+        assert_eq!(display_width(&padded), 14);
+    }
+
+    #[test]
+    fn test_pad_left_accounts_for_width() {
+        let plain = "1h 04m";
+        let padded = pad_left(plain, plain, 8);
+        assert_eq!(display_width(&padded), 8);
     }
 }

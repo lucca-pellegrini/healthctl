@@ -43,12 +43,8 @@ pub enum Command {
     },
     /// Show today's status summary.
     Status,
-    /// Generate a report.
-    Report {
-        /// Period: day, week, month.
-        #[arg(default_value = "week")]
-        period: String,
-    },
+    /// Generate a report (overview by default; pass flags for detailed cards).
+    Report(ReportCommand),
     /// Manage the daemon.
     Daemon(DaemonCommand),
 }
@@ -161,6 +157,72 @@ pub struct ListCommand {
     /// Filter by tag (can be repeated).
     #[arg(long = "tag", num_args = 1)]
     pub tags: Vec<String>,
+}
+
+#[derive(Parser)]
+pub struct ReportCommand {
+    /// Period: day, week, month, year.
+    #[arg(default_value = "week")]
+    pub period: String,
+
+    /// Show detailed steps breakdown.
+    #[arg(long, short = 'S')]
+    pub steps: bool,
+    /// Show detailed calories breakdown.
+    #[arg(long, short = 'c')]
+    pub calories: bool,
+    /// Show detailed distance breakdown.
+    #[arg(long, short = 'd')]
+    pub distance: bool,
+    /// Show detailed active-time breakdown.
+    #[arg(long, short = 'A')]
+    pub active: bool,
+    /// Show detailed sleep breakdown.
+    #[arg(long, short = 's')]
+    pub sleep: bool,
+    /// Show detailed workouts breakdown.
+    #[arg(long, short = 'w')]
+    pub workouts: bool,
+    /// Show every card in full detail.
+    #[arg(long, short = 'a')]
+    pub all: bool,
+}
+
+impl ReportCommand {
+    /// Which detailed cards were requested (in display order).
+    pub fn selected_cards(&self) -> Vec<crate::format::ReportCard> {
+        use crate::format::ReportCard;
+        if self.all {
+            return vec![
+                ReportCard::Steps,
+                ReportCard::Calories,
+                ReportCard::Distance,
+                ReportCard::Active,
+                ReportCard::Sleep,
+                ReportCard::Workouts,
+            ];
+        }
+        let mut cards = Vec::new();
+        if self.steps {
+            cards.push(ReportCard::Steps);
+        }
+        if self.calories {
+            cards.push(ReportCard::Calories);
+        }
+        if self.distance {
+            cards.push(ReportCard::Distance);
+        }
+        if self.active {
+            cards.push(ReportCard::Active);
+        }
+        if self.sleep {
+            cards.push(ReportCard::Sleep);
+        }
+        if self.workouts {
+            cards.push(ReportCard::Workouts);
+        }
+        cards
+    }
 }
 
 #[derive(Parser)]
