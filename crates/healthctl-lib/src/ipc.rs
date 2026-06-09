@@ -30,6 +30,22 @@ pub enum Request {
     Status,
     /// Generate a report.
     Report { period: ReportPeriod },
+    /// List event candidates for shell completion (short id + label),
+    /// most-recent first, optionally filtered by an id prefix.
+    CompleteEvents {
+        /// Optional short-id prefix to filter on.
+        #[serde(default)]
+        prefix: Option<String>,
+        /// Maximum number of candidates to return.
+        #[serde(default)]
+        limit: Option<u32>,
+    },
+    /// List recently-used tags for shell completion, most-recent first.
+    CompleteTags {
+        /// Maximum number of tags to return.
+        #[serde(default)]
+        limit: Option<u32>,
+    },
     /// Shutdown the daemon.
     Shutdown,
     /// Ping (health check).
@@ -51,8 +67,26 @@ pub enum ResponseData {
     Events(Vec<Event>),
     Summary(StatusSummary),
     Report(ReportData),
+    /// Shell-completion event candidates (most-recent first).
+    Completions(Vec<EventCompletion>),
+    /// Shell-completion tag candidates (most-recent first).
+    Tags(Vec<String>),
     Pong,
     Ack,
+}
+
+/// A single event candidate for shell completion.
+///
+/// `short_id` is the 8-character id prefix shown by `healthctl list`. The
+/// `description` is a human-readable annotation (type, date and tags) used to
+/// inform the user what kind of event the id refers to — analogous to how
+/// `git show <TAB>` annotates commit hashes.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EventCompletion {
+    /// Short 8-char id prefix (the completion candidate itself).
+    pub short_id: String,
+    /// Human-readable description (e.g. "🏃 Run · Jun 06 07:30 · morning").
+    pub description: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
