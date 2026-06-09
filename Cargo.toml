@@ -24,3 +24,5 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-journald = "0.3"
 uuid = { version = "1", features = ["v4", "serde"] }
 directories = "6"
+owo-colors = "4"
+unicode-width = "0.2"
