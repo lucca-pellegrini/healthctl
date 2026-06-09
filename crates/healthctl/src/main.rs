@@ -1,6 +1,7 @@
 mod cli;
 mod client;
 mod daemon_ctl;
+mod dashboard_ctl;
 mod format;
 
 use anyhow::Result;
@@ -110,6 +111,9 @@ fn main() -> Result<()> {
         }
         cli::Command::Daemon(daemon_cmd) => {
             daemon_ctl::handle(daemon_cmd)?;
+        }
+        cli::Command::Dashboard => {
+            dashboard_ctl::handle()?;
         }
     }
 

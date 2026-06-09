@@ -47,6 +47,8 @@ pub enum Command {
     Report(ReportCommand),
     /// Manage the daemon.
     Daemon(DaemonCommand),
+    /// Launch the Tauri dashboard UI in the background.
+    Dashboard,
 }
 
 #[derive(Parser)]
@@ -227,12 +229,20 @@ impl ReportCommand {
 
 #[derive(Parser)]
 pub struct DaemonCommand {
-    #[arg(long)]
-    pub stop: bool,
-    #[arg(long)]
-    pub restart: bool,
-    #[arg(long)]
-    pub status: bool,
+    #[command(subcommand)]
+    pub action: Option<DaemonAction>,
+}
+
+#[derive(Subcommand)]
+pub enum DaemonAction {
+    /// Start the daemon if it is not already running.
+    Start,
+    /// Stop the running daemon.
+    Stop,
+    /// Restart the daemon.
+    Restart,
+    /// Show whether the daemon is running.
+    Status,
 }
 
 pub fn parse() -> Args {
