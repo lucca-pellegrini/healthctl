@@ -1,5 +1,5 @@
 use healthctl_lib::event::Event;
-use healthctl_lib::ipc::{ReportPeriod, Request, Response, ResponseData};
+use healthctl_lib::ipc::{AckMarker, PongMarker, ReportPeriod, Request, Response, ResponseData};
 use healthctl_lib::validate::validate_event;
 use uuid::Uuid;
 
@@ -26,9 +26,9 @@ pub async fn handle_request(request: Request, db: &Database) -> Response {
         Request::CompleteTags { limit } => handle_complete_tags(limit, db).await,
         Request::Shutdown => {
             // The shutdown signal is handled by the main loop; just ack here.
-            Response::Ok(ResponseData::Ack)
+            Response::Ok(ResponseData::Ack(AckMarker::default()))
         }
-        Request::Ping => Response::Ok(ResponseData::Pong),
+        Request::Ping => Response::Ok(ResponseData::Pong(PongMarker::default())),
     }
 }
 
@@ -153,7 +153,7 @@ async fn handle_delete(id: Uuid, db: &Database) -> Response {
     match db.delete_event(id).await {
         Ok(true) => {
             tracing::info!(id = %id, "event deleted");
-            Response::Ok(ResponseData::Ack)
+            Response::Ok(ResponseData::Ack(AckMarker::default()))
         }
         Ok(false) => Response::Error {
             message: format!("event {id} not found"),
@@ -168,7 +168,7 @@ async fn handle_delete_by_prefix(prefix: String, db: &Database) -> Response {
     match db.delete_event_by_prefix(&prefix).await {
         Ok(Some(id)) => {
             tracing::info!(id = %id, prefix = %prefix, "event deleted by prefix");
-            Response::Ok(ResponseData::Ack)
+            Response::Ok(ResponseData::Ack(AckMarker::default()))
         }
         Ok(None) => Response::Error {
             message: format!("no event matching prefix '{prefix}'"),

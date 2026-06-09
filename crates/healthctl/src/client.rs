@@ -71,8 +71,8 @@ pub fn try_send_request(request: Request) -> Result<Response> {
 pub fn print_response(response: Response) {
     match response {
         Response::Ok(data) => match data {
-            ResponseData::Ack => println!("ok"),
-            ResponseData::Pong => println!("pong"),
+            ResponseData::Ack(_) => println!("ok"),
+            ResponseData::Pong(_) => println!("pong"),
             ResponseData::Event(event) => {
                 format::print_event_detail(&event);
             }

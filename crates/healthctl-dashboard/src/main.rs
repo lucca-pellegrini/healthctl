@@ -808,7 +808,7 @@ async fn delete_event(_state: State<'_, AppState>, event_id: String) -> Result<b
     let response = send_request(&request)?;
 
     match response {
-        Response::Ok(ResponseData::Ack) => Ok(true),
+        Response::Ok(ResponseData::Ack(_)) => Ok(true),
         Response::Error { message } => Err(message),
         _ => Err("Unexpected response from daemon".to_string()),
     }

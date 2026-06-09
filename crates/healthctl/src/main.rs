@@ -80,7 +80,7 @@ fn main() -> Result<()> {
                     let delete_request = resolve_delete_request(&event_id);
                     let response = client::send_request(delete_request)?;
                     match response {
-                        Response::Ok(ResponseData::Ack) => {
+                        Response::Ok(ResponseData::Ack(_)) => {
                             println!("Deleted event {}", &event.id.to_string()[..8]);
                         }
                         Response::Error { message } => {

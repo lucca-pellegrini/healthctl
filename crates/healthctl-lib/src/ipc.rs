@@ -71,8 +71,35 @@ pub enum ResponseData {
     Completions(Vec<EventCompletion>),
     /// Shell-completion tag candidates (most-recent first).
     Tags(Vec<String>),
-    Pong,
-    Ack,
+    /// Simple acknowledgment responses use wrapper structs to ensure unique
+    /// serialization with `#[serde(untagged)]`. Unit variants would all
+    /// serialize to `null` and become indistinguishable.
+    Pong(PongMarker),
+    Ack(AckMarker),
+}
+
+/// Marker struct for Pong response (serializes distinctly from Ack).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PongMarker {
+    pong: bool,
+}
+
+impl Default for PongMarker {
+    fn default() -> Self {
+        Self { pong: true }
+    }
+}
+
+/// Marker struct for Ack response (serializes distinctly from Pong).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AckMarker {
+    ack: bool,
+}
+
+impl Default for AckMarker {
+    fn default() -> Self {
+        Self { ack: true }
+    }
 }
 
 /// A single event candidate for shell completion.
@@ -251,4 +278,58 @@ fn whoami() -> String {
     std::env::var("USER")
         .or_else(|_| std::env::var("LOGNAME"))
         .unwrap_or_else(|_| "unknown".into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ack_roundtrip() {
+        let response = Response::Ok(ResponseData::Ack(AckMarker::default()));
+        let json = serde_json::to_string(&response).unwrap();
+        println!("Serialized Ack: {}", json);
+
+        let parsed: Response = serde_json::from_str(&json).unwrap();
+        println!("Parsed: {:?}", parsed);
+
+        match parsed {
+            Response::Ok(ResponseData::Ack(_)) => {}
+            other => panic!("Expected Ack, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_pong_roundtrip() {
+        let response = Response::Ok(ResponseData::Pong(PongMarker::default()));
+        let json = serde_json::to_string(&response).unwrap();
+        println!("Serialized Pong: {}", json);
+
+        let parsed: Response = serde_json::from_str(&json).unwrap();
+        println!("Parsed: {:?}", parsed);
+
+        match parsed {
+            Response::Ok(ResponseData::Pong(_)) => {}
+            other => panic!("Expected Pong, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_ack_and_pong_are_distinct() {
+        let ack = Response::Ok(ResponseData::Ack(AckMarker::default()));
+        let pong = Response::Ok(ResponseData::Pong(PongMarker::default()));
+
+        let ack_json = serde_json::to_string(&ack).unwrap();
+        let pong_json = serde_json::to_string(&pong).unwrap();
+
+        // They should serialize to different JSON
+        assert_ne!(ack_json, pong_json);
+
+        // Each should roundtrip correctly
+        let parsed_ack: Response = serde_json::from_str(&ack_json).unwrap();
+        let parsed_pong: Response = serde_json::from_str(&pong_json).unwrap();
+
+        assert!(matches!(parsed_ack, Response::Ok(ResponseData::Ack(_))));
+        assert!(matches!(parsed_pong, Response::Ok(ResponseData::Pong(_))));
+    }
 }
