@@ -1,0 +1,244 @@
+#compdef healthctl
+# ----------------------------------------------------------------------------
+# zsh completion for healthctl — the health-metrics tracking CLI.
+#
+# Static structure (subcommands, flags, fixed value sets) is hand-written here;
+# dynamic data (event IDs, tags) is fetched at completion time from the running
+# daemon via the hidden `healthctl __complete` subcommand. The latter prints
+# nothing when the daemon isn't running, so completion degrades gracefully and
+# never blocks the prompt.
+#
+# Installation:
+#   1. Copy this file somewhere on your $fpath, named `_healthctl`, e.g.
+#        mkdir -p ~/.zfunc && cp completions/_healthctl ~/.zfunc/
+#        fpath=(~/.zfunc $fpath)   # in ~/.zshrc, *before* compinit
+#   2. Ensure compinit runs:
+#        autoload -Uz compinit && compinit
+#   (You may need to clear the cache once: `rm -f ~/.zcompdump; compinit`.)
+# ----------------------------------------------------------------------------
+
+# Locate the healthctl binary the user actually invoked (respects PATH / alias).
+_healthctl_bin() {
+  local bin=${words[1]}
+  if [[ $bin != */* ]]; then
+    bin=$(command -v -- "$bin" 2>/dev/null) || bin=healthctl
+  fi
+  print -r -- "$bin"
+}
+
+# Complete short event IDs, annotated with type/date/tags (à la `git show`).
+# Newest-first ordering is preserved from the daemon (we disable sorting).
+_healthctl_events() {
+  local bin; bin=$(_healthctl_bin)
+  local -a ids
+  local id desc line
+  # Pass the already-typed prefix so large histories are filtered server-side.
+  # Short IDs are hex, so the prefix never looks like an option flag.
+  local prefix=${words[CURRENT]}
+  # `${(f)...}` splits on newlines; each line is "short_id<TAB>description".
+  local -a lines
+  if [[ -n $prefix ]]; then
+    lines=("${(@f)$("$bin" __complete events "$prefix" 2>/dev/null)}")
+  else
+    lines=("${(@f)$("$bin" __complete events 2>/dev/null)}")
+  fi
+  for line in $lines; do
+    [[ -z $line ]] && continue
+    id=${line%%$'\t'*}
+    desc=${line#*$'\t'}
+    # `id:description` is the format _describe consumes for menu annotations.
+    ids+=("${id}:${desc}")
+  done
+  # -V keeps our (chronological) order; -o nosort belt-and-braces.
+  _describe -V -t events 'event' ids -o nosort
+}
+
+# Complete tags from previously-seen tags (most-recent first, capped daemon-side).
+_healthctl_tags() {
+  local bin; bin=$(_healthctl_bin)
+  local -a tags
+  tags=("${(@f)$("$bin" __complete tags 2>/dev/null)}")
+  # Drop any empty trailing element.
+  tags=(${tags:#})
+  compadd -V tags -o nosort -a tags
+}
+
+# Event categories accepted by `add`.
+_healthctl_categories() {
+  local -a cats
+  cats=(
+    'activity:Physical activity (run, walk, cycle, swim, hike, …)'
+    'strength:Strength / resistance training'
+    'sleep:Sleep'
+    'nutrition:Food / meals'
+    'hydration:Water / drinks'
+    'substance:Supplements / substances'
+    'mental:Mental health (meditation, prayer, …)'
+  )
+  _describe -t categories 'category' cats
+}
+
+# Subtypes, contextual on the category already typed (words[2] for `add`).
+_healthctl_subtypes() {
+  local -a subs
+  case ${words[2]} in
+    activity)
+      subs=(run walk cycle swim hike)
+      ;;
+    mental)
+      subs=(meditation relaxation prayer journaling)
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+  _describe -t subtypes 'subtype' subs
+}
+
+# Event-type filter for `list` (the category names, used as a substring filter).
+_healthctl_event_types() {
+  local -a types
+  types=(activity strength sleep nutrition hydration substance mental)
+  _describe -t event-types 'event type' types
+}
+
+_healthctl_periods() {
+  local -a periods
+  periods=(
+    'day:Today' 'week:Last 7 days' 'month:Last 30 days' 'year:Last 365 days'
+  )
+  _describe -t periods 'period' periods
+}
+
+# --- per-subcommand argument specs -----------------------------------------
+
+_healthctl_add() {
+  _arguments -s \
+    '--start=[Start time]:start time:' \
+    '--end=[End time]:end time:' \
+    '--duration=[Duration, e.g. 45m, 1h15m, 00:45]:duration:' \
+    '--distance=[Distance, e.g. 5km]:distance:' \
+    '--elevation=[Elevation gain, e.g. 120m]:elevation:' \
+    '--calories=[Energy, e.g. 350kcal]:calories:' \
+    '--steps=[Step count]:steps:' \
+    '--sets=[Number of sets]:sets:' \
+    '--reps=[Number of reps]:reps:' \
+    '--weight=[Weight, e.g. 80kg]:weight:' \
+    '--volume=[Volume, e.g. 500ml]:volume:' \
+    '--protein=[Protein, e.g. 30g]:protein:' \
+    '--carbs=[Carbohydrates, e.g. 60g]:carbs:' \
+    '--fat=[Fat, e.g. 12g]:fat:' \
+    '*--tag=[Tag (repeatable)]:tag:_healthctl_tags' \
+    '*--exercise=[Exercise (repeatable)]:exercise:' \
+    '1:category:_healthctl_categories' \
+    '2:subtype:_healthctl_subtypes' \
+    '3:amount (e.g. 500ml, 200mg):'
+}
+
+_healthctl_show() {
+  _arguments -s '1:event:_healthctl_events'
+}
+
+_healthctl_edit() {
+  _arguments -s '1:event:_healthctl_events'
+}
+
+_healthctl_remove() {
+  _arguments -s \
+    '(-y --yes)'{-y,--yes}'[Skip confirmation prompt]' \
+    '1:event:_healthctl_events'
+}
+
+_healthctl_clone() {
+  _arguments -s \
+    '--start=[Start time]:start time:' \
+    '--end=[End time]:end time:' \
+    '--duration=[Duration]:duration:' \
+    '--calories=[Energy, e.g. 350kcal]:calories:' \
+    '*--tag=[Tag (repeatable)]:tag:_healthctl_tags' \
+    '1:event:_healthctl_events'
+}
+
+_healthctl_list() {
+  _arguments -s \
+    '--day=[Filter by day, e.g. today, yesterday, 2026-06-01]:day:' \
+    '--week[Events from the last 7 days]' \
+    '--from=[Start date/time]:from:' \
+    '--to=[End date/time]:to:' \
+    '--limit=[Maximum number of events]:limit:' \
+    '(-a --all)'{-a,--all}'[Show all events (no time filter)]' \
+    '(-r --reverse)'{-r,--reverse}'[Most recent first]' \
+    '*--tag=[Filter by tag (repeatable)]:tag:_healthctl_tags' \
+    '1:event type:_healthctl_event_types'
+}
+
+_healthctl_report() {
+  _arguments -s \
+    '(-S --steps)'{-S,--steps}'[Detailed steps breakdown]' \
+    '(-c --calories)'{-c,--calories}'[Detailed calories breakdown]' \
+    '(-d --distance)'{-d,--distance}'[Detailed distance breakdown]' \
+    '(-A --active)'{-A,--active}'[Detailed active-time breakdown]' \
+    '(-s --sleep)'{-s,--sleep}'[Detailed sleep breakdown]' \
+    '(-w --workouts)'{-w,--workouts}'[Detailed workouts breakdown]' \
+    '(-a --all)'{-a,--all}'[Every card in full detail]' \
+    '1:period:_healthctl_periods'
+}
+
+_healthctl_daemon() {
+  local -a actions
+  actions=(
+    'start:Start the daemon if not running'
+    'stop:Stop the running daemon'
+    'restart:Restart the daemon'
+    'status:Show whether the daemon is running'
+  )
+  _arguments -s '1:action:->action'
+  case $state in
+    action) _describe -t actions 'action' actions ;;
+  esac
+}
+
+# --- top-level dispatch -----------------------------------------------------
+
+_healthctl() {
+  local curcontext="$curcontext" state line
+  local -a commands
+  commands=(
+    'add:Add a new health event'
+    'show:Show a single event in detail'
+    'clone:Clone an existing event with overrides'
+    'list:List events'
+    'edit:Edit an event in $EDITOR'
+    'remove:Remove (delete) an event'
+    'rm:Remove (delete) an event'
+    'status:Show today'\''s status summary'
+    'report:Generate a report'
+    'daemon:Manage the daemon'
+    'dashboard:Launch the Tauri dashboard UI'
+  )
+
+  _arguments -C \
+    '1:command:->command' \
+    '*::arg:->args'
+
+  case $state in
+    command)
+      _describe -t commands 'healthctl command' commands
+      ;;
+    args)
+      case ${words[1]} in
+        add)       _healthctl_add ;;
+        show)      _healthctl_show ;;
+        clone)     _healthctl_clone ;;
+        list)      _healthctl_list ;;
+        edit)      _healthctl_edit ;;
+        remove|rm) _healthctl_remove ;;
+        report)    _healthctl_report ;;
+        daemon)    _healthctl_daemon ;;
+        status|dashboard) ;;  # no further arguments
+      esac
+      ;;
+  esac
+}
+
+_healthctl "$@"
