@@ -7,6 +7,9 @@ use serde::{Deserialize, Serialize};
 use std::process::Command;
 use tauri::State;
 
+#[cfg(not(debug_assertions))]
+use tauri::Manager;
+
 /// A simplified event for the frontend
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ActivityItem {
@@ -881,6 +884,22 @@ fn main() {
             get_theme,
             set_theme
         ])
+        .setup(|app| {
+            #[cfg(not(debug_assertions))]
+            {
+                let window = app.get_webview_window("main").unwrap();
+
+                window.eval(
+                    r#"
+                    document.addEventListener('contextmenu', function(e) {
+                        e.preventDefault();
+                    });
+                    "#,
+                )?;
+            }
+
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
