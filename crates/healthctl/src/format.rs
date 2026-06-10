@@ -59,7 +59,8 @@ pub fn event_emoji(event_type: &EventType) -> &'static str {
 /// Format event type as a colored, pretty string.
 pub fn format_event_type(event_type: &EventType) -> String {
     let emoji = event_emoji(event_type);
-    let name = match event_type {
+
+    match event_type {
         EventType::Activity(kind) => {
             let kind_str = match kind {
                 ActivityKind::Run => "Run",
@@ -86,8 +87,7 @@ pub fn format_event_type(event_type: &EventType) -> String {
             };
             format!("{} {}", emoji, kind_str.green())
         }
-    };
-    name
+    }
 }
 
 /// Format event type as plain string (no color codes) for width calculation.
@@ -629,7 +629,7 @@ fn fmt_int(v: f64) -> String {
     let s = n.abs().to_string();
     let mut out = String::new();
     for (i, ch) in s.chars().enumerate() {
-        if i > 0 && (s.len() - i) % 3 == 0 {
+        if i > 0 && (s.len() - i).is_multiple_of(3) {
             out.push(',');
         }
         out.push(ch);
@@ -812,12 +812,10 @@ fn format_metric_value(key: &str, val: f64) -> String {
         }
     } else if key.ends_with("_kcal") {
         format!("{:.0} kcal", val)
+    } else if val.fract() == 0.0 {
+        format!("{:.0}", val)
     } else {
-        if val.fract() == 0.0 {
-            format!("{:.0}", val)
-        } else {
-            format!("{val}")
-        }
+        format!("{val}")
     }
 }
 

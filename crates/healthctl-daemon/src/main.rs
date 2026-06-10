@@ -91,14 +91,14 @@ async fn handle_connection(
 /// Create the UNIX listener, checking for systemd socket activation first.
 fn create_listener() -> Result<UnixListener> {
     // Check for systemd socket activation: FD 3.
-    if let Ok(listen_fds) = std::env::var("LISTEN_FDS") {
-        if listen_fds.parse::<u32>().unwrap_or(0) >= 1 {
-            tracing::info!("using systemd socket activation (FD 3)");
-            use std::os::unix::io::FromRawFd;
-            let std_listener = unsafe { StdUnixListener::from_raw_fd(3) };
-            std_listener.set_nonblocking(true)?;
-            return Ok(UnixListener::from_std(std_listener)?);
-        }
+    if let Ok(listen_fds) = std::env::var("LISTEN_FDS")
+        && listen_fds.parse::<u32>().unwrap_or(0) >= 1
+    {
+        tracing::info!("using systemd socket activation (FD 3)");
+        use std::os::unix::io::FromRawFd;
+        let std_listener = unsafe { StdUnixListener::from_raw_fd(3) };
+        std_listener.set_nonblocking(true)?;
+        return Ok(UnixListener::from_std(std_listener)?);
     }
 
     // Otherwise, create our own socket.
@@ -122,16 +122,16 @@ fn create_listener() -> Result<UnixListener> {
 /// Try to initialize tracing-journald. Returns true if successful.
 fn try_init_journald() -> bool {
     // Only use journald if running under systemd (indicated by JOURNAL_STREAM).
-    if std::env::var("JOURNAL_STREAM").is_ok() {
-        if let Ok(layer) = tracing_journald::layer() {
-            use tracing_subscriber::layer::SubscriberExt;
-            use tracing_subscriber::util::SubscriberInitExt;
-            tracing_subscriber::registry()
-                .with(layer)
-                .with(EnvFilter::from_default_env())
-                .init();
-            return true;
-        }
+    if std::env::var("JOURNAL_STREAM").is_ok()
+        && let Ok(layer) = tracing_journald::layer()
+    {
+        use tracing_subscriber::layer::SubscriberExt;
+        use tracing_subscriber::util::SubscriberInitExt;
+        tracing_subscriber::registry()
+            .with(layer)
+            .with(EnvFilter::from_default_env())
+            .init();
+        return true;
     }
     false
 }

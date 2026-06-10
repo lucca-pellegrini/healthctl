@@ -329,10 +329,8 @@ impl Database {
             self.load_event_details(&mut event).await?;
 
             // Post-filter by tags if needed.
-            if !filter.tags.is_empty() {
-                if !filter.tags.iter().all(|t| event.tags.contains(t)) {
-                    continue;
-                }
+            if !filter.tags.is_empty() && !filter.tags.iter().all(|t| event.tags.contains(t)) {
+                continue;
             }
 
             events.push(event);
@@ -451,7 +449,7 @@ impl Database {
 
             if date == expected_date {
                 streak += 1;
-                expected_date = expected_date - chrono::Duration::days(1);
+                expected_date -= chrono::Duration::days(1);
             } else if date < expected_date {
                 // Gap in dates, streak is broken
                 break;

@@ -155,10 +155,10 @@ fn resolve_most_recent(time: NaiveTime) -> DateTime<Utc> {
     let candidate = today.and_time(time);
     let candidate_local = Local.from_local_datetime(&candidate).single();
 
-    if let Some(local_dt) = candidate_local {
-        if local_dt <= local_now {
-            return local_dt.with_timezone(&Utc);
-        }
+    if let Some(local_dt) = candidate_local
+        && local_dt <= local_now
+    {
+        return local_dt.with_timezone(&Utc);
     }
 
     // Use yesterday.

@@ -302,10 +302,10 @@ fn get_event_activity_type(event: &Event) -> String {
 
 fn get_sleep_quality(event: &Event) -> Option<i32> {
     for tag in &event.tags {
-        if tag.starts_with("quality:") {
-            if let Ok(q) = tag[8..].parse::<i32>() {
-                return Some(q);
-            }
+        if tag.starts_with("quality:")
+            && let Ok(q) = tag[8..].parse::<i32>()
+        {
+            return Some(q);
         }
     }
     None
@@ -504,30 +504,29 @@ async fn get_dashboard_data(
                         "cardio",
                     ]
                     .contains(&tag_lower.as_str())
+                        && !muscle_groups.contains(&tag_lower)
                     {
-                        if !muscle_groups.contains(&tag_lower) {
-                            muscle_groups.push(tag_lower);
-                        }
+                        muscle_groups.push(tag_lower);
                     }
                 }
             }
         }
 
         // Sleep that ended within this week
-        if matches!(event.event_type, EventType::Sleep) {
-            if let Some(end) = event.end_time {
-                let end_date = end.date_naive();
-                if end_date >= week_start && end_date <= week_end {
-                    let hours = get_duration_mins(event) as f64 / 60.0;
-                    sleep_hours_total += hours;
-                    sleep_count += 1;
+        if matches!(event.event_type, EventType::Sleep)
+            && let Some(end) = event.end_time
+        {
+            let end_date = end.date_naive();
+            if end_date >= week_start && end_date <= week_end {
+                let hours = get_duration_mins(event) as f64 / 60.0;
+                sleep_hours_total += hours;
+                sleep_count += 1;
 
-                    sleep_nights.push(SleepNight {
-                        date: end_date.format("%a %m/%d").to_string(),
-                        hours,
-                        quality: get_sleep_quality(event),
-                    });
-                }
+                sleep_nights.push(SleepNight {
+                    date: end_date.format("%a %m/%d").to_string(),
+                    hours,
+                    quality: get_sleep_quality(event),
+                });
             }
         }
     }
@@ -592,27 +591,26 @@ async fn get_dashboard_data(
 
         for event in &events {
             // Regular events by start_time
-            if let Some(start) = event.start_time {
-                if start.date_naive() == date {
-                    day_stats.steps += get_steps(event);
-                    day_stats.calories += get_calories(event);
-                    day_stats.distance_km += get_distance_km(event);
-                    if !matches!(event.event_type, EventType::Sleep) {
-                        day_stats.active_mins += get_duration_mins(event);
-                    }
-                    if is_workout(event) {
-                        day_stats.workouts += 1;
-                    }
+            if let Some(start) = event.start_time
+                && start.date_naive() == date
+            {
+                day_stats.steps += get_steps(event);
+                day_stats.calories += get_calories(event);
+                day_stats.distance_km += get_distance_km(event);
+                if !matches!(event.event_type, EventType::Sleep) {
+                    day_stats.active_mins += get_duration_mins(event);
+                }
+                if is_workout(event) {
+                    day_stats.workouts += 1;
                 }
             }
 
             // Sleep by end_time (when you woke up)
-            if matches!(event.event_type, EventType::Sleep) {
-                if let Some(end) = event.end_time {
-                    if end.date_naive() == date {
-                        day_stats.sleep_hours += get_duration_mins(event) as f64 / 60.0;
-                    }
-                }
+            if matches!(event.event_type, EventType::Sleep)
+                && let Some(end) = event.end_time
+                && end.date_naive() == date
+            {
+                day_stats.sleep_hours += get_duration_mins(event) as f64 / 60.0;
             }
         }
 

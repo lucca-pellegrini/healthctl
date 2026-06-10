@@ -44,10 +44,10 @@ pub fn validate_event(event: &Event) -> Result<()> {
     }
 
     // Cross-field: if start > end, that's invalid.
-    if let (Some(start), Some(end)) = (event.start_time, event.end_time) {
-        if start > end {
-            bail!("start time ({start}) is after end time ({end})");
-        }
+    if let (Some(start), Some(end)) = (event.start_time, event.end_time)
+        && start > end
+    {
+        bail!("start time ({start}) is after end time ({end})");
     }
 
     Ok(())
