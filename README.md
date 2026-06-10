@@ -1,12 +1,17 @@
 # healthctl
 
-**Ferramenta CLI para rastreamento de saúde pessoal** - Contribuindo para o ODS 3 (Saúde e Bem-Estar)
+**Ferramenta CLI para rastreamento de saúde pessoal** - Contribuindo para o ODS
+3 (Saúde e Bem-Estar)
 
 ## Sobre o Projeto
 
-O `healthctl` é uma solução de software desenvolvida como trabalho prático da disciplina de Engenharia de Software, abordando o **Objetivo de Desenvolvimento Sustentável 3 (ODS 3) - Saúde e Bem-Estar**.
+O `healthctl` é uma solução de software desenvolvida como trabalho prático da
+disciplina de Engenharia de Software, abordando o **Objetivo de Desenvolvimento
+Sustentável 3 (ODS 3) - Saúde e Bem-Estar**.
 
-A aplicação permite que usuários registrem e acompanhem métricas de saúde pessoal através de uma interface de linha de comando (CLI) eficiente e um dashboard visual, promovendo hábitos saudáveis e autocuidado.
+A aplicação permite que usuários registrem e acompanhem métricas de saúde
+pessoal através de uma interface de linha de comando (CLI) eficiente e um
+dashboard visual, promovendo hábitos saudáveis e autocuidado.
 
 ## Tecnologias
 
@@ -24,11 +29,18 @@ A aplicação permite que usuários registrem e acompanhem métricas de saúde p
 git clone https://github.com/lucca-pellegrini/healthctl.git
 cd healthctl
 
-# Compilar
-cargo build --release
+cargo build --release --all # Compilar
+./target/release/healthctl --help # Executar
+cp ./target/release/healthctl{,-daemon,-dashboard} ~/.local/bin/ # Instalar em .local/bin
+```
 
-# Executar
-./target/release/healthctl --help
+Também pode-se compilar uma [AppImage](https://appimage.org/) com todos os
+componentes em um único executável (é necessário ter
+[appimagetool](https://github.com/AppImage/appimagetool) no `PATH`):
+
+```bash
+./utils/build_appimage.sh # Resultado em target/appimage/healthctl-<ARCH>.AppImage
+cp target/appimage/healthctl-x86_64.AppImage ~/.local/bin/healthctl
 ```
 
 ## Uso Básico
@@ -65,18 +77,21 @@ subcomandos e flags, ela consulta o daemon em tempo real para sugerir:
 - **Tags** (em `add --tag`, `list --tag`, `clone --tag`), ordenadas da mais
   recente para a mais antiga (limitadas às ~30 mais recentes).
 
-Para instalar:
+Para instalar (exemplo):
 
-```bash
-# Copie a função para um diretório no seu $fpath
-mkdir -p ~/.zfunc
-cp completions/_healthctl ~/.zfunc/
+- Copie a função para um diretório no seu $fpath
+  ```bash
+  mkdir -p ~/.config/zsh/zfunc
+  cp completions/_healthctl ~/.config/zsh/zfunc/
+  ```
+- Em ~/.zshrc, *antes* de `compinit`:
+  ```bash
+  fpath+="${HOME}/.config/zsh/zfunc"
+  autoload -Uz compinit
+  compinit
+  ```
 
-# Em ~/.zshrc, *antes* de `compinit`:
-fpath=(~/.zfunc $fpath)
-autoload -Uz compinit && compinit
-```
-
+> [!NOTE]
 > As sugestões dinâmicas (IDs e tags) aparecem apenas quando o daemon já está
 > em execução; caso contrário, a completação simplesmente não oferece esses
 > candidatos (sem erros e sem iniciar o daemon).
@@ -92,9 +107,9 @@ healthctl/
 │   └── healthctl-dashboard/# Dashboard Tauri
 ├── completions/            # Completação de shell (zsh)
 ├── docs/                   # Documentação do projeto
-│   ├── requisitos.md      # Requisitos e casos de uso
-│   ├── arquitetura.md     # Arquitetura C4
-│   └── testes.md          # Plano de testes
+│   ├── requisitos.md       # Requisitos e casos de uso
+│   ├── arquitetura.md      # Arquitetura C4
+│   └── testes.md           # Plano de testes
 └── Videos/                 # Vídeos de demonstração
 ```
 
