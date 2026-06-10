@@ -870,6 +870,7 @@ async fn set_theme(_state: State<'_, AppState>, theme: String) -> Result<(), Str
     Ok(())
 }
 
+#[allow(unused_variables)]
 fn main() {
     let app_state = AppState {};
 

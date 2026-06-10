@@ -53,6 +53,7 @@ pub enum Request {
 }
 
 /// Response from daemon → client.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "status", content = "data")]
 pub enum Response {
@@ -60,6 +61,7 @@ pub enum Response {
     Error { message: String },
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ResponseData {

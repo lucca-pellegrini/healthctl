@@ -14,6 +14,7 @@ pub struct Args {
     pub command: Command,
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Subcommand)]
 pub enum Command {
     /// Add a new health event.
